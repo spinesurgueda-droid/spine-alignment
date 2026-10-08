@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#131a20">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Spine Align">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>脊椎アライメント計測</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen viewer. Header (slots) / X-ray stage / bottom sheet of parameters, like a PACS reading station shrunk to a phone. */
+:root{
+  --bg:#0c1014; --stage:#05070a; --panel:#131a20; --panel2:#1a232b; --line:#26323c;
+  --fg:#e4eaef; --mut:#8a98a5; --acc:#5cc8f5; --anno:#f1d264;
+  --ok:#4fc28c; --warn:#f0a43c; --bad:#ff6f6f;
+  --f-body:"IBM Plex Sans JP","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:dark;
+}
+html{height:100%;box-sizing:border-box;background:var(--bg)}
+*,*::before,*::after{box-sizing:inherit}
+body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;overflow:hidden;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0)}
+#app{display:grid;grid-template-rows:auto minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr);height:100%}
+[hidden]{display:none!important}
+
+/* header */
+#top{background:var(--panel);border-bottom:1px solid var(--line);padding:calc(8px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) 8px max(12px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:8px}
+.r1,.r2{display:flex;align-items:center;gap:8px;min-width:0}
+.ctx{flex:1;min-width:0;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--bg);display:flex;align-items:center;gap:9px;padding:0 10px;text-align:left}
+.ctx .tx{min-width:0;display:flex;flex-direction:column;line-height:1.2;flex:1}
+.ctx b{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctx small{font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctx svg{width:14px;height:14px;stroke:var(--mut);fill:none;stroke-width:2;flex:none}
+.mark{width:10px;height:18px;border-radius:2px;align-self:center;background:linear-gradient(var(--anno) 0 22%,transparent 22% 39%,var(--anno) 39% 61%,transparent 61% 78%,var(--anno) 78%)}
+.ib{width:36px;height:36px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);display:grid;place-items:center;padding:0;flex:none}
+.ib svg{width:18px;height:18px;stroke:var(--fg);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.btn{height:36px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-weight:500}
+.btn.pri{background:var(--acc);color:#04202d;border-color:transparent}
+.btn.sm{height:30px;padding:0 10px;font-size:12.5px;border-radius:8px}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:2px;gap:2px;flex:none}
+.seg button{border:0;background:transparent;border-radius:7px;padding:5px 10px;font-size:13px;color:var(--mut);position:relative;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--panel2);color:var(--fg);box-shadow:0 0 0 1px var(--line)}
+.seg button i{position:absolute;top:4px;right:3px;width:5px;height:5px;border-radius:50%;background:var(--anno)}
+.chip{height:30px;border-radius:15px;border:1px solid var(--line);background:transparent;padding:0 10px;font-size:12px;color:var(--mut);white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.chip.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.r2{overflow-x:auto;scrollbar-width:none}
+.r2::-webkit-scrollbar{display:none}
+
+/* stage */
+#stage{position:relative;overflow:hidden;background:var(--stage);touch-action:none;min-height:0}
+#cv{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+#loupe{position:absolute;width:132px;height:132px;border-radius:50%;border:2px solid var(--acc);box-shadow:0 6px 24px #000a;pointer-events:none;top:64px}
+#prompt{position:absolute;left:10px;right:10px;top:10px;background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:12px;padding:9px 10px 9px 12px;display:flex;flex-direction:column;gap:6px}
+#prompt .pm{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+#prompt .stp{font-family:var(--f-num);font-size:11.5px;color:var(--acc)}
+#prompt b{font-size:15px;font-weight:600}
+#prompt .sub{color:var(--anno);font-weight:600}
+#prompt .hint{font-size:12px;color:var(--mut);line-height:1.45}
+#prompt .pa{display:flex;gap:6px;flex-wrap:wrap}
+#empty{position:absolute;inset:0;display:grid;place-items:center;padding:24px}
+#empty .card{max-width:340px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;color:var(--mut);line-height:1.6}
+#empty .card strong{color:var(--fg);font-size:16px;font-weight:600}
+.zoomtag{position:absolute;right:10px;bottom:8px;font-family:var(--f-num);font-size:11px;color:var(--mut);pointer-events:none;background:#0008;padding:2px 6px;border-radius:6px}
+
+/* sheet */
+#sheet{background:var(--panel);border-top:1px solid var(--line);display:flex;flex-direction:column;max-height:46vh;max-height:46dvh;min-height:0;padding-bottom:env(safe-area-inset-bottom,0px)}
+#sheet.max{max-height:80vh;max-height:80dvh}
+#grip{border:0;background:transparent;height:20px;display:grid;place-items:center;flex:none;padding:0}
+#grip span{width:40px;height:4px;border-radius:2px;background:var(--line)}
+#regions{display:flex;gap:6px;overflow-x:auto;padding:0 12px 8px;flex:none;scrollbar-width:none}
+#regions::-webkit-scrollbar{display:none}
+#regions button,.chips button{flex:none;border:1px solid var(--line);background:var(--panel2);border-radius:16px;height:32px;padding:0 12px;font-size:13px;color:var(--mut);display:inline-flex;align-items:center;gap:6px}
+#regions button[aria-pressed="true"],.chips button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+#regions button small,.chips button small{font-family:var(--f-num);font-size:10.5px;opacity:.75}
+#sbody{overflow-y:auto;min-height:0;padding:0 12px 12px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
+#sheet.min #sbody{display:none}
+.rhead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;color:var(--mut);font-size:12px}
+.det{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.det .dt{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.det h3{margin:0;font-size:15px;font-weight:600;text-wrap:balance}
+.det .en{font-size:11.5px;color:var(--mut);letter-spacing:.02em}
+.det .big{font-family:var(--f-num);font-size:26px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.det .big small{font-size:14px;color:var(--mut);margin-left:2px}
+.det p{margin:0;font-size:12.5px;line-height:1.6;color:var(--mut)}
+.det .note{color:var(--fg);font-size:13px}
+.det .acts{display:flex;gap:6px;flex-wrap:wrap}
+.list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;padding:9px 12px;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;width:100%;position:relative}
+.row:first-child{border-top:0}
+.row[aria-current="true"]{background:color-mix(in srgb,var(--acc) 10%,transparent)}
+.row[aria-current="true"]::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--acc)}
+.row .nm{font-size:13.5px;min-width:0}
+.row .nm small{display:block;color:var(--mut);font-size:11px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .val{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:15px;text-align:right;white-space:nowrap;display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.row .val small{color:var(--mut);font-size:11.5px}
+.row .todo{font-family:var(--f-body);font-size:12px;color:var(--acc)}
+.dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--mut)}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}
+.pill{font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid currentColor;white-space:nowrap;font-family:var(--f-body)}
+.pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}.pill.bad{color:var(--bad)}.pill.na{color:var(--mut)}
+.dyn{display:grid;grid-template-columns:1fr repeat(3,auto);gap:0 12px;align-items:center;font-variant-numeric:tabular-nums}
+.dyn div{padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.dyn .h{color:var(--mut);font-size:11px;border-top:0;padding-top:0}
+.dyn .n{font-family:var(--f-num);text-align:right;white-space:nowrap}
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+
+#regions button.tr{color:var(--acc);border-color:color-mix(in srgb,var(--acc) 45%,var(--line))}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:none}
+.chips::-webkit-scrollbar{display:none}
+.plist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.prow{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;padding:10px 12px;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;width:100%}
+.prow:first-child{border-top:0}
+.prow.on{background:color-mix(in srgb,var(--acc) 10%,transparent)}
+.prow b{font-weight:600;font-size:14px}
+.prow small{display:block;color:var(--mut);font-size:11.5px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow .rt{font-size:11.5px;color:var(--mut);text-align:right;white-space:nowrap}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld label{font-size:11.5px;color:var(--mut)}
+.fld input,.fld select,.fld textarea{height:38px;border-radius:8px;border:1px solid var(--line);background:var(--bg);padding:0 10px;width:100%;min-width:0}
+.fld textarea{height:60px;min-height:0;padding:8px 10px;font-family:var(--f-body);font-size:13px;line-height:1.5}
+.srow{display:grid;grid-template-columns:minmax(0,1fr) 140px;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:center}
+.srow:first-child{border-top:0}
+.srow.on{background:color-mix(in srgb,var(--acc) 10%,transparent)}
+.srow input{height:34px;border-radius:8px;border:1px solid var(--line);background:var(--bg);padding:0 8px;min-width:0;width:100%}
+.srow .meta{font-size:12px;color:var(--mut)}
+.srow .sa{display:flex;gap:6px;justify-content:flex-end}
+.trtbl{border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:12.5px;min-width:100%}
+.trtbl th,.trtbl td{padding:7px 10px;border-top:1px solid var(--line);text-align:right;white-space:nowrap}
+.trtbl th:first-child,.trtbl td:first-child{text-align:left;position:sticky;left:0;background:var(--panel);max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.trtbl thead th{border-top:0;color:var(--mut);font-weight:500;font-size:11px;vertical-align:bottom;line-height:1.35}
+.trtbl tbody tr{cursor:pointer}
+.trtbl tr.on td{background:color-mix(in srgb,var(--acc) 12%,var(--panel))}
+.trtbl td.n{font-family:var(--f-num)}
+.trtbl .ok{color:var(--ok)}.trtbl .warn{color:var(--warn)}.trtbl .bad{color:var(--bad)}
+.tblwrap.flush{padding:0}
+.chart{border:1px solid var(--line);border-radius:12px;padding:10px 8px 4px}
+.chart svg{width:100%;height:auto;display:block}
+.chart .ct{font-size:12.5px;padding:0 6px 4px;display:flex;justify-content:space-between;gap:8px}
+.chart .ct span{color:var(--mut)}
+/* modal */
+#modal{position:fixed;inset:0;background:#000a;display:flex;align-items:flex-end;justify-content:center;z-index:20}
+#modal .mc{background:var(--panel);border:1px solid var(--line);border-radius:16px 16px 0 0;width:100%;max-width:560px;max-height:88vh;max-height:88dvh;overflow:auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
+@media (min-width:700px){#modal{align-items:center}#modal .mc{border-radius:16px}}
+.mh{display:flex;justify-content:space-between;align-items:center}
+.mh h2{margin:0;font-size:16px;font-weight:600}
+.fs{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+.fs > label,.fs .lab{font-size:12px;color:var(--mut);letter-spacing:.04em}
+.fl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fl input[type=number],.fl input[type=text]{height:36px;border-radius:8px;border:1px solid var(--line);background:var(--bg);padding:0 10px;width:120px;font-family:var(--f-num)}
+.fl input[type=range]{flex:1;min-width:140px;accent-color:var(--acc)}
+.fl .v{font-family:var(--f-num);font-size:12px;color:var(--mut);min-width:44px;text-align:right}
+.small{font-size:12px;color:var(--mut);line-height:1.6;margin:0}
+textarea{width:100%;min-height:220px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;font-family:var(--f-num);font-size:12px;line-height:1.55;resize:vertical}
+#toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:13px;z-index:30;max-width:calc(100% - 32px);text-align:center}
+@media (prefers-reduced-motion:no-preference){#toast{animation:tin .18s ease-out}@keyframes tin{from{opacity:0;transform:translate(-50%,6px)}}}
+</style>
+</head>
+<body>
+
+
+<div id="app">
+  <header id="top">
+    <div class="r1">
+      <button class="ctx" id="bCtx" aria-label="患者・測定日を選ぶ"><span class="mark" aria-hidden="true"></span><span class="tx"><b id="ctxP">Spine Align</b><small id="ctxS">脊椎アライメント計測</small></span><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <label class="btn pri" for="file"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>画像</label>
+      <input id="file" class="vh" type="file" accept="image/*,.dcm,application/dicom">
+      <button id="bRep" class="ib" aria-label="レポート" title="レポート"><svg viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg></button>
+      <button id="bSet" class="ib" aria-label="設定" title="設定"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
+    </div>
+    <div class="r2">
+      <div id="slots" class="seg" role="group" aria-label="画像スロット"></div>
+      <button id="bUndo" class="ib" style="width:32px;height:32px" aria-label="元に戻す" title="元に戻す"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+      <button id="bFace" class="chip"></button>
+      <button id="bCal" class="chip"></button>
+      <button id="bFit" class="chip">全体表示</button>
+    </div>
+  </header>
+  <main id="stage">
+    <canvas id="cv"></canvas>
+    <canvas id="loupe" hidden></canvas>
+    <div id="empty" hidden><div class="card"><strong>このスロットに画像がありません</strong><span>X線画像（JPEG / PNG / 非圧縮DICOM）を読み込みます。スマホで撮影したフィルムやモニターの写真も使えます。画像は端末内だけで処理され、外部には送信されません。</span><label class="btn pri" for="file">画像を読み込む</label></div></div>
+    <div id="prompt" hidden>
+      <div class="pm"><span class="stp" id="pStep"></span><b id="pName"></b><span class="sub" id="pSub"></span></div>
+      <div class="hint" id="pHint"></div>
+      <div class="pa"><button class="btn sm" id="pBack">1つ戻す</button><button class="btn sm" id="pSkip">スキップ</button><button class="btn sm ghost" id="pStop">終了</button></div>
+    </div>
+    <div class="zoomtag" id="ztag"></div>
+  </main>
+  <section id="sheet" class="mid">
+    <button id="grip" aria-label="パネルの大きさを切り替え"><span></span></button>
+    <nav id="regions" aria-label="部位"></nav>
+    <div id="sbody"></div>
+  </section>
+</div>
+<div id="modal" hidden><div class="mc" id="mc"></div></div>
+<div id="toast" hidden></div>
+
+<script>
+'use strict';
+/* ================= geometry ================= */
+const R2D=180/Math.PI,D2R=Math.PI/180;
+const sub=(a,b)=>({x:a.x-b.x,y:a.y-b.y}),add=(a,b)=>({x:a.x+b.x,y:a.y+b.y}),mul=(a,k)=>({x:a.x*k,y:a.y*k});
+const dot=(a,b)=>a.x*b.x+a.y*b.y,crs=(a,b)=>a.x*b.y-a.y*b.x,len=a=>Math.hypot(a.x,a.y);
+const mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2}),dist=(a,b)=>len(sub(a,b)),unit=a=>{const l=len(a)||1;return{x:a.x/l,y:a.y/l}};
+const ang=v=>Math.atan2(v.y,v.x)*R2D;            // vs horizontal
+const tilt=v=>Math.atan2(v.x,v.y)*R2D;           // vs vertical-up, + = anterior (sag) / patient right (cor)
+const nd=a=>{a%=360;if(a>180)a-=360;if(a<-180)a+=360;return a};
+const btw=(u,v)=>Math.acos(Math.max(-1,Math.min(1,dot(u,v)/((len(u)*len(v))||1))))*R2D;
+const sd=(p,a,b)=>crs(sub(b,a),sub(p,a))/(dist(a,b)||1); // + = left of a→b
+const th=L=>ang(sub(L.A,L.P));
+const foot=(p,a,b)=>{const v=sub(b,a);const t=dot(sub(p,a),v)/(dot(v,v)||1);return add(a,mul(v,t))};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* ================= landmarks ================= */
+const LM={};
+function def(k,type,name,hint,subs){LM[k]={k,type,name,hint:hint||'',subs:subs||(type==='ln'?['前縁','後縁']:type==='pair'?['1つ目','2つ目']:[''])}}
+const EP=(k,n,h)=>def(k,'ln',n,h||'終板の前縁 → 後縁の順にタップ');
+['C2','C3','C4','C5','C6'].forEach(v=>EP(v+'inf',v+' 下終板'));
+EP('C7sup','C7 上終板');EP('C7inf','C7 下終板');EP('T1sup','T1 上終板');EP('T2sup','T2 上終板');EP('T4sup','T4 上終板');
+EP('T5sup','T5 上終板');EP('T5inf','T5 下終板');EP('T10sup','T10 上終板');EP('T12inf','T12 下終板');EP('L1sup','L1 上終板');
+EP('L2inf','L2 下終板');EP('L3inf','L3 下終板');EP('L4sup','L4 上終板');EP('L4inf','L4 下終板');EP('L5sup','L5 上終板');
+EP('L5inf','L5 下終板');EP('S1sup','S1 上終板','仙骨上縁の前縁（岬角）→ 後縁');
+EP('UIVinf','UIV 下終板','最上位固定椎（UIV）の下終板');EP('UIV2sup','UIV+2 上終板','UIV の2椎上位の上終板');
+EP('FX_U','上位隣接椎 上終板','骨折椎の1つ上の椎体の上終板');EP('FX_L','下位隣接椎 下終板','骨折椎の1つ下の椎体の下終板');
+EP('FX_sup','骨折椎 上終板');EP('FX_inf','骨折椎 下終板');
+const pt=(k,n,h)=>def(k,'pt',n,h);
+pt('C2c','C2 椎体中心','歯突起を除いた C2 椎体の中心');pt('C7c','C7 椎体中心','C7 の上下終板が入力済みなら自動計算');
+pt('T1c','T1 椎体中心');pt('T4c','T4 椎体中心');pt('L1c','L1 椎体中心');
+pt('C2pwS','C2 後壁 上端','C2 椎体後壁の上端（歯突起基部の後縁）');pt('C2pwI','C2 後下縁','C2 椎体の後下角');
+pt('C7pwS','C7 後上縁');pt('C7pwI','C7 後下縁');
+['C3','C4','C5','C6'].forEach(v=>pt(v+'pi',v+' 後下縁',v+' 椎体の後下角'));
+pt('S1pwS','S1 後上縁');pt('S1pwI','S1 後壁 下端','S1 椎体後壁の下端');
+def('Hip','pair','大腿骨頭中心','左右の骨頭中心をタップ。片側しか見えない場合は2つ目で「スキップ」');
+pt('PNS','硬口蓋後端（PNS）','硬口蓋の後端');pt('Opis','オピスチオン','大後頭孔の後縁');pt('Basion','バジオン','大後頭孔の前縁（斜台の下端）');
+pt('DensTip','歯突起先端');pt('DensA','歯突起 前縁','ADI を測る高さの歯突起前面');pt('DensP','歯突起 後縁','歯突起の後面（脊柱管側）');
+pt('C1A','C1 前弓中心');pt('C1P','C1 後弓中心');pt('C1aP','C1 前弓 後縁','前弓の後面（歯突起側）');
+pt('C1pA','C1 後弓 前縁','後弓の前面（脊柱管側）');pt('OccLow','後頭骨 最下点','後頭鱗の最下点（McGregor 線の後端）');
+pt('ClivSup','斜台 上端','斜台後面の上端（鞍背）');pt('Nasion','ナジオン','前頭鼻骨縫合');pt('TubS','鞍結節','トルコ鞍の前縁');
+pt('C2ped','C2 椎弓根中心','C2 椎弓根の硬化輪の中心');pt('C2infMid','C2 下縁中点');
+pt('DuraV','硬膜腹側 最大点','歯突起後方で pB–C2 線から最も離れた硬膜腹側の点');
+pt('Stern','胸骨上端','胸骨柄の上端');pt('Brow','眉','眉間の皮膚表面（全身側面像・写真）');pt('Chin','オトガイ','オトガイの皮膚表面');
+pt('C2cm','C2 脊柱管中点','C2 レベルの脊柱管前後径の中点');pt('C7cm','C7 脊柱管中点','C7 レベルの脊柱管前後径の中点');
+pt('OPLLp','OPLL 頂点','骨化巣の最も後方へ突出する点');pt('VBpw','OPLL部 椎体後縁','骨化巣が付着する椎体の後縁');pt('SLp','OPLL部 椎弓腹側','同じ高さの脊柱管後壁（椎弓前縁）');
+pt('TP_VBa','測定椎 前縁中点','通常 C5 椎体前縁の中点');pt('TP_VBp','測定椎 後縁中点','同じ椎体の後縁中点');pt('TP_SL','棘突起椎弓線','同じ高さの脊柱管後縁');
+const CL=(k,n)=>def(k,'ln',n,'終板の左右両端をタップ（順不同）',['端1','端2']);
+CL('AP_ptU','上位胸椎カーブ 上位終椎 上終板');CL('AP_ptL','上位胸椎カーブ 下位終椎 下終板');
+CL('AP_mtU','主胸椎カーブ 上位終椎 上終板');CL('AP_mtL','主胸椎カーブ 下位終椎 下終板');
+CL('AP_tlU','胸腰椎/腰椎カーブ 上位終椎 上終板');CL('AP_tlL','胸腰椎/腰椎カーブ 下位終椎 下終板');
+CL('AP_L4sup','L4 上終板');CL('AP_S1sup','S1 上終板（仙骨上縁）');CL('AP_T1sup','T1 上終板');
+pt('AP_C7c','C7 椎体中心');pt('AP_S1c','仙骨上縁 中点','CSVL の基点');pt('AP_apexT','胸椎頂椎 中心');pt('AP_apexL','腰椎頂椎 中心');
+const RL='「右・左」は患者の左右（標準表示では画像の左が患者の右）';
+pt('AP_clavR','右鎖骨 最高点',RL);pt('AP_clavL','左鎖骨 最高点',RL);pt('AP_shR','右肩 軟部最高点','肩鎖関節直上の軟部陰影。'+RL);pt('AP_shL','左肩 軟部最高点',RL);
+pt('AP_icR','右腸骨稜 最高点',RL);pt('AP_icL','左腸骨稜 最高点',RL);pt('AP_fhR','右大腿骨頭 頂点',RL);pt('AP_fhL','左大腿骨頭 頂点',RL);
+pt('AP_vCx','頂椎 凸側の椎体縁');pt('AP_vCc','頂椎 凹側の椎体縁');pt('AP_ped','頂椎 凸側椎弓根の中心');
+pt('AP_laPm','腰椎頂椎 凹側椎弓根の内側縁');pt('AP_laE','腰椎頂椎 凹側の椎体外側縁');
+const FL=(k,n)=>def(k,'ln',n,'2点をタップ',['始点','終点']);
+FL('FR_l1','直線1');FL('FR_l2','直線2');FL('FR_l3','直線3');FL('FR_l4','直線4');FL('FR_d1','距離1');FL('FR_d2','距離2');FL('FR_pl','基準線');FL('FR_t','傾きを測る線');
+pt('FR_a','点A');pt('FR_b','頂点B');pt('FR_c','点C');pt('FR_pp','測定点');
+def('_cal','ln','較正線','長さが分かっている2点（定規の目盛り・較正球の直径など）',['始点','終点']);
+
+/* derived landmarks: [source, index] or [srcA, srcB] for centroid */
+const DER={C2pwI:['C2inf',1],C7pwS:['C7sup',1],C7pwI:['C7inf',1],C3pi:['C3inf',1],C4pi:['C4inf',1],C5pi:['C5inf',1],C6pi:['C6inf',1],
+  S1pwS:['S1sup',1],C2infMid:['C2inf','m'],C7c:['C7sup','C7inf']};
+const ANTPOST=[['PNS','Opis'],['DensA','DensP'],['C1A','C1P'],['C1aP','C1pA'],['Nasion','Basion'],['TP_VBa','TP_VBp']];
+
+/* ================= parameters ================= */
+const REG=[
+ {id:'cvj',n:'頭蓋・CVJ',v:'s',d:'側面像（頭蓋〜C2）'},
+ {id:'cx',n:'頚椎',v:'s',d:'頚椎側面像'},
+ {id:'tx',n:'胸椎',v:'s',d:'胸椎・全脊椎側面像'},
+ {id:'lx',n:'腰椎・骨盤',v:'s',d:'腰椎・骨盤側面像（骨頭を含む）'},
+ {id:'gl',n:'全脊椎',v:'s',d:'全脊椎立位側面像'},
+ {id:'co',n:'冠状面',v:'c',d:'全脊椎立位正面像'},
+ {id:'fx',n:'骨折・局所',v:'s',d:'側面像'},
+ {id:'dyn',n:'前後屈',v:'d',d:'前屈・後屈スロットの差（不安定性）'},
+ {id:'free',n:'任意計測',v:'f',d:'どの画像でも使える角度・距離ツール'}];
+const STX={ok:'基準内',warn:'境界',bad:'基準外'};
+function R(v,u,s,t,st,x){return{v,u,s:s||null,t:t||'',st:st||'',x:x||{}}}
+function M(g,px,sf,t,st){if(g.mmpp){const v=px*g.mmpp;return R(v,'mm',sf?sf(v):null,t,st)}return R(px,'px',null,(t?t+' / ':'')+'未較正のため px 表示')}
+function pel(g){const S=g.l('S1sup'),Mi=mid(S.A,S.P),H=g.p('Hip'),SS=-th(S),v=sub(Mi,H),PT=Math.atan2(-v.x,v.y)*R2D;return{S,M:Mi,H,SS,PT,PI:PT+SS}}
+const lord=(g,u,l)=>nd(th(g.l(u))-th(g.l(l)));
+const kyph=(g,u,l)=>-lord(g,u,l);
+const pa=(g,k)=>{const p=pel(g);return tilt(sub(g.p(k),p.H))+p.PT};
+const f1=v=>(Math.round(v*10)/10).toFixed(1);
+function slip(g,U,Lw){const u=g.l(U),l=g.l(Lw),e=sub(l.A,l.P),t=dot(sub(u.P,l.P),unit(e)),pct=t/len(e)*100;
+  const gr=pct<0?'後方すべり':pct<25?'Grade I':pct<50?'Grade II':pct<75?'Grade III':pct<=100?'Grade IV':'Grade V';
+  const mm=g.mmpp?t*g.mmpp:null;
+  return R(pct,'%',Math.abs(pct)<5?'ok':Math.abs(pct)<25?'warn':'bad',(mm!=null?f1(mm)+' mm':f1(t)+' px')+' / Meyerding '+gr,Math.abs(pct)<5?'':gr,{mm,px:t})}
+function disc(g,U,Lw){const u=g.l(U),l=g.l(Lw),a=lord(g,U,Lw),ha=dist(u.A,l.A),hp=dist(u.P,l.P);
+  const fm=v=>g.mmpp?f1(v*g.mmpp)+' mm':f1(v)+' px';return R(a,'°',null,'椎間板高 前方 '+fm(ha)+' / 後方 '+fm(hp)+'（前弯を＋）')}
+function cobb(g,U,Lw){const d=nd(th(g.l(U))-th(g.l(Lw))),v=Math.abs(d);
+  return R(v,'°',v<10?'ok':v<45?'warn':'bad',v<1?'':(d>0?'右凸':'左凸')+'（患者の左右）',v<10?'10°未満':'')}
+function lr(g,a,b,lab){ // a=right b=left (patient)
+  const A=g.p(a),B=g.p(b),dy=A.y-B.y,an=ang(sub(A,B));const side=dy>0?'右が高い':dy<0?'左が高い':'水平';
+  return {an:Math.abs(an),dy,side}}
+const P=[
+/* --- CVJ --- */
+{id:'chamb',r:'cvj',n:'Chamberlain 線',en:'Chamberlain line',lm:['PNS','Opis','DensTip'],
+ f:g=>{const d=sd(g.p('DensTip'),g.p('Opis'),g.p('PNS'));return M(g,d,v=>v>3?'bad':'ok',d>0?'歯突起先端は線より上方':'歯突起先端は線より下方')},
+ ref:'硬口蓋後端–オピスチオン。歯突起先端が 3 mm を超えて上方なら頭蓋底陥入（上方を＋）。',dr:d=>{d.seg('PNS','Opis',.15);d.perp('DensTip','PNS','Opis')}},
+{id:'mcg',r:'cvj',n:'McGregor 線',en:'McGregor line',lm:['PNS','OccLow','DensTip'],
+ f:g=>{const d=sd(g.p('DensTip'),g.p('OccLow'),g.p('PNS'));return M(g,d,v=>v>4.5?'bad':'ok',d>0?'歯突起先端は線より上方':'歯突起先端は線より下方')},
+ ref:'硬口蓋後端–後頭骨最下点。歯突起先端が 4.5 mm を超えて上方なら頭蓋底陥入（上方を＋）。',dr:d=>{d.seg('PNS','OccLow',.15);d.perp('DensTip','PNS','OccLow')}},
+{id:'mcrae',r:'cvj',n:'McRae 線',en:'McRae line / foramen magnum',lm:['Basion','Opis','DensTip'],
+ f:g=>{const B=g.p('Basion'),O=g.p('Opis'),d=sd(g.p('DensTip'),O,B),fm=dist(B,O);const r=M(g,d,()=>d>0?'bad':'ok',d>0?'歯突起先端が大後頭孔線を越える':'歯突起先端は線より下方');
+   r.t+=' / 大後頭孔径 '+(g.mmpp?f1(fm*g.mmpp)+' mm':f1(fm)+' px');return r},
+ ref:'バジオン–オピスチオン。歯突起先端は線より下方が正常（上方を＋）。大後頭孔径 平均 約35 mm。',dr:d=>{d.seg('Basion','Opis',.1);d.perp('DensTip','Basion','Opis')}},
+{id:'wack',r:'cvj',n:'Wackenheim 斜台線',en:'Wackenheim clivus line',lm:['ClivSup','Basion','DensTip'],
+ f:g=>{const d=sd(g.p('DensTip'),g.p('Basion'),g.p('ClivSup'));return M(g,d,()=>d>0?'bad':'ok',d>0?'歯突起先端が線より後方（陥入疑い）':'歯突起先端は線より前方')},
+ ref:'斜台後面の延長線。歯突起先端が線より後方なら頭蓋底陥入を疑う（後方を＋）。',dr:d=>{d.seg('ClivSup','Basion',.6);d.perp('DensTip','ClivSup','Basion')}},
+{id:'boog',r:'cvj',n:'Boogaard 角',en:'Boogaard angle',lm:['ClivSup','Basion','Opis'],
+ f:g=>{const B=g.p('Basion'),v=btw(sub(g.p('ClivSup'),B),sub(g.p('Opis'),B));return R(v,'°',v>136?'bad':'ok')},
+ ref:'斜台線と McRae 線のなす角。正常 119.5–135°、136° 超で頭蓋底陥入。',dr:d=>{d.seg('ClivSup','Basion');d.seg('Basion','Opis')}},
+{id:'cxa',r:'cvj',n:'斜台脊柱管角（CXA）',en:'Clivo-axial / clivus-canal angle',lm:['ClivSup','Basion','C2pwS','C2pwI'],
+ f:g=>{const v=btw(sub(g.p('ClivSup'),g.p('Basion')),sub(g.p('C2pwI'),g.p('C2pwS')));return R(v,'°',v<135?'bad':v<150?'warn':'ok')},
+ ref:'Wackenheim 線と C2 後壁線のなす角。正常 150–180°、150° 未満で異常、135° 未満で腹側脳幹圧迫のリスク。',dr:d=>{d.seg('ClivSup','Basion',.5);d.seg('C2pwS','C2pwI',1.2)}},
+{id:'basal',r:'cvj',n:'頭蓋底角（Welcher）',en:'Basal angle',lm:['Nasion','TubS','Basion'],
+ f:g=>{const T=g.p('TubS'),v=btw(sub(g.p('Nasion'),T),sub(g.p('Basion'),T));return R(v,'°',v>143?'bad':'ok','',v>143?'扁平頭蓋底':'')},
+ ref:'ナジオン–鞍結節–バジオン。正常 約125–143°、143° 超で扁平頭蓋底（platybasia）。',dr:d=>{d.seg('Nasion','TubS');d.seg('TubS','Basion')}},
+{id:'ranawat',r:'cvj',n:'Ranawat 値',en:'Ranawat criterion',lm:['C1A','C1P','C2ped'],
+ f:g=>M(g,Math.abs(sd(g.p('C2ped'),g.p('C1P'),g.p('C1A'))),v=>v<13?'bad':'ok'),
+ ref:'C1 前弓・後弓中心を結ぶ線と C2 椎弓根中心の距離。正常 男性 約17 mm・女性 約15 mm、13 mm 未満で頭蓋底陥入（RA）。',dr:d=>{d.seg('C1A','C1P',.2);d.perp('C2ped','C1A','C1P')}},
+{id:'redlund',r:'cvj',n:'Redlund-Johnell 値',en:'Redlund-Johnell criterion',lm:['PNS','OccLow','C2infMid'],
+ f:g=>M(g,Math.abs(sd(g.p('C2infMid'),g.p('OccLow'),g.p('PNS'))),v=>v<29?'bad':v<34?'warn':'ok'),
+ ref:'McGregor 線と C2 下縁中点の距離。下限 男性 34 mm・女性 29 mm（RA の垂直亜脱臼）。',dr:d=>{d.seg('PNS','OccLow',.15);d.perp('C2infMid','PNS','OccLow')}},
+{id:'adi',r:'cvj',n:'ADI（環椎歯突起間距離）',en:'Atlanto-dental interval',lm:['C1aP','DensA'],
+ f:g=>M(g,dist(g.p('C1aP'),g.p('DensA')),v=>v>3?'bad':'ok'),
+ ref:'C1 前弓後縁–歯突起前縁。成人 3 mm 以下（小児 5 mm 以下）。RA で 3 mm 超は不安定、9–10 mm 以上は手術を考慮。',dr:d=>d.seg('C1aP','DensA')},
+{id:'padi',r:'cvj',n:'PADI / SAC',en:'Posterior atlanto-dental interval',lm:['DensP','C1pA'],
+ f:g=>M(g,dist(g.p('DensP'),g.p('C1pA')),v=>v<=14?'bad':'ok'),
+ ref:'歯突起後縁–C1 後弓前縁。14 mm 以下で麻痺リスク（RA）。ADI より神経学的予後を反映。',dr:d=>d.seg('DensP','C1pA')},
+{id:'powers',r:'cvj',n:'Powers 比',en:'Powers ratio (BC/OA)',lm:['Basion','C1pA','Opis','C1aP'],
+ f:g=>{const v=dist(g.p('Basion'),g.p('C1pA'))/dist(g.p('Opis'),g.p('C1aP'));return R(v,'',v>1?'bad':'ok',v>1?'前方環椎後頭関節脱臼を疑う':'')},
+ ref:'BC / OA（B: バジオン, C: C1 後弓前縁, O: オピスチオン, A: C1 前弓後縁）。1 未満が正常、1 超で前方 AOD。',dr:d=>{d.seg('Basion','C1pA');d.seg('Opis','C1aP')}},
+{id:'bdi',r:'cvj',n:'BDI（バジオン–歯突起間距離）',en:'Basion-dens interval',lm:['Basion','DensTip'],
+ f:g=>M(g,dist(g.p('Basion'),g.p('DensTip')),v=>v>12?'bad':'ok','CT では 8.5 mm 以下が正常'),
+ ref:'バジオン–歯突起先端。X 線 12 mm 以下（Harris の rule of 12）、CT 8.5 mm 以下。',dr:d=>d.seg('Basion','DensTip')},
+{id:'bai',r:'cvj',n:'BAI（バジオン–軸椎間距離）',en:'Basion-axial interval',lm:['Basion','C2pwS','C2pwI'],
+ f:g=>{const v=-sd(g.p('Basion'),g.p('C2pwI'),g.p('C2pwS'));return M(g,v,x=>x>12||x<-4?'bad':'ok',v>=0?'バジオンは後壁線より前方':'バジオンは後壁線より後方')},
+ ref:'バジオンと C2 後壁延長線の距離（前方を＋）。正常 −4〜+12 mm（Harris）。',dr:d=>{d.seg('C2pwI','C2pwS',1.6);d.perp('Basion','C2pwI','C2pwS')}},
+{id:'oc2',r:'cvj',n:'O–C2 角（C0–2）',en:'Occipito-C2 angle',lm:['PNS','OccLow','C2inf'],
+ f:g=>R(nd(th({A:g.p('PNS'),P:g.p('OccLow')})-th(g.l('C2inf'))),'°',null,'前弯を＋'),
+ ref:'McGregor 線と C2 下終板のなす角。中間位 平均 約14.5°（±7°）。後頭頚椎固定では術前中間位を目安に、過小は嚥下障害と関連。',dr:d=>d.seg('PNS','OccLow',.3)},
+{id:'c12',r:'cvj',n:'C1–2 角',en:'C1-C2 angle',lm:['C1A','C1P','C2inf'],
+ f:g=>R(nd(th({A:g.p('C1A'),P:g.p('C1P')})-th(g.l('C2inf'))),'°',null,'前弯を＋'),
+ ref:'C1 前後弓中心線と C2 下終板のなす角（前弯を＋）。環軸椎固定の角度設定の参考。',dr:d=>d.seg('C1A','C1P',.4)},
+{id:'grabb',r:'cvj',n:'pB–C2（Grabb-Oakes）',en:'pB-C2 line',lm:['Basion','C2pwI','DuraV'],
+ f:g=>M(g,Math.abs(sd(g.p('DuraV'),g.p('Basion'),g.p('C2pwI'))),v=>v>=9?'bad':'ok'),
+ ref:'バジオン–C2 後下縁線から硬膜腹側までの最大垂直距離。9 mm 以上で腹側圧迫のハイリスク（Chiari I）。',dr:d=>{d.seg('Basion','C2pwI');d.perp('DuraV','Basion','C2pwI')}},
+/* --- cervical --- */
+{id:'c27',r:'cx',n:'C2–7 角（Cobb）',en:'Cervical lordosis C2-7',lm:['C2inf','C7inf'],
+ f:g=>{const v=lord(g,'C2inf','C7inf');return R(v,'°',v<0?'warn':'ok',v<0?'後弯':'前弯を＋',v<0?'後弯':'')},
+ ref:'C2 下終板と C7 下終板のなす角（Cobb 法, 前弯を＋）。健常 約10–20°。'},
+{id:'c27h',r:'cx',n:'C2–7 角（後壁接線法）',en:'Harrison posterior tangent',lm:['C2pwS','C2pwI','C7pwS','C7pwI'],
+ f:g=>{const v=tilt(sub(g.p('C7pwS'),g.p('C7pwI')))-tilt(sub(g.p('C2pwS'),g.p('C2pwI')));return R(v,'°',v<0?'warn':'ok','前弯を＋',v<0?'後弯':'')},
+ ref:'C2・C7 椎体後壁接線のなす角（前弯を＋）。Cobb 法より過大評価が少ない。',dr:d=>{d.seg('C2pwS','C2pwI',.8);d.seg('C7pwS','C7pwI',.8)}},
+{id:'c2s',r:'cx',n:'C2 slope',en:'C2 slope',lm:['C2inf'],f:g=>R(-th(g.l('C2inf')),'°',null,'前方下降を＋'),
+ ref:'C2 下終板の水平に対する傾き。',dr:d=>d.hor('C2inf')},
+{id:'t1s',r:'cx',n:'T1 slope',en:'T1 slope',lm:['T1sup'],f:g=>R(-th(g.l('T1sup')),'°'),
+ ref:'T1 上終板の水平に対する傾き。平均 約25°。頚椎前弯の主要な決定因子。',dr:d=>d.hor('T1sup')},
+{id:'tscl',r:'cx',n:'T1S − CL',en:'T1 slope minus cervical lordosis',lm:['T1sup','C2inf','C7inf'],
+ f:g=>{const v=-th(g.l('T1sup'))-lord(g,'C2inf','C7inf');return R(v,'°',v>20?'bad':'ok',v>20?'前弯不足（mismatch）':'')},
+ ref:'T1 slope − C2–7 角。20° 超で頚椎前弯不足（mismatch）。頚椎後弯矯正の目標設定に用いる。'},
+{id:'csva',r:'cx',n:'C2–7 SVA',en:'cSVA',lm:['C2c','C7pwS'],
+ f:g=>{const v=g.p('C2c').x-g.p('C7pwS').x;return M(g,v,x=>x>40?'bad':'ok','前方を＋')},
+ ref:'C2 椎体中心の鉛直線と C7 後上縁の水平距離（前方を＋）。40 mm 超で HRQOL 低下。',dr:d=>{d.vert('C2c');d.vert('C7pwS')}},
+{id:'tia',r:'cx',n:'Thoracic inlet angle',en:'TIA',lm:['T1sup','Stern'],
+ f:g=>{const L=g.l('T1sup'),m=mid(L.A,L.P),v=sub(m,g.p('Stern')),nt=Math.atan2(-v.x,v.y)*R2D;return R(-th(L)+nt,'°',null,'= T1S + NT')},
+ ref:'T1 上終板中点の垂線と、同点–胸骨上端線のなす角（= T1 slope + Neck tilt）。平均 約70°。個人固有の形態パラメータ。',dr:d=>{d.norm('T1sup');d.seg('Stern','T1sup')}},
+{id:'nt',r:'cx',n:'Neck tilt',en:'NT',lm:['T1sup','Stern'],
+ f:g=>{const L=g.l('T1sup'),v=sub(mid(L.A,L.P),g.p('Stern'));return R(Math.atan2(-v.x,v.y)*R2D,'°')},
+ ref:'胸骨上端の鉛直線と、胸骨上端–T1 上終板中点線のなす角。平均 約44°。',dr:d=>{d.vert('Stern');d.seg('Stern','T1sup')}},
+{id:'cbva',r:'cx',n:'Chin-brow vertical angle',en:'CBVA',lm:['Brow','Chin'],
+ f:g=>{const v=tilt(sub(g.p('Brow'),g.p('Chin')));return R(v,'°',Math.abs(v)<=10?'ok':'warn',v>=0?'屈曲（下向き）':'伸展（上向き）')},
+ ref:'眉–オトガイ線と鉛直線のなす角（屈曲を＋）。全身側面像・臨床写真で測定。術後目標 約 −10〜+10°。',dr:d=>{d.seg('Brow','Chin',.1);d.vert('Chin')}},
+{id:'mcgs',r:'cx',n:'McGregor slope',en:'McGS',lm:['PNS','OccLow'],
+ f:g=>R(-th({A:g.p('PNS'),P:g.p('OccLow')}),'°',null,'前方下降（屈曲）を＋'),
+ ref:'McGregor 線の水平に対する傾き。CBVA と強く相関し、X 線のみで頭部の向きを評価できる。',dr:d=>{d.seg('PNS','OccLow',.3);d.hor('PNS')}},
+{id:'ishi',r:'cx',n:'Ishihara 指数',en:'Cervical curvature index',lm:['C2pwI','C3pi','C4pi','C5pi','C6pi','C7pwI'],
+ f:g=>{const a=g.p('C7pwI'),b=g.p('C2pwI');let s=0;['C3pi','C4pi','C5pi','C6pi'].forEach(k=>s+=-sd(g.p(k),a,b));const v=s/dist(a,b)*100;return R(v,'',v<0?'warn':'ok',v<0?'後弯':'前弯','')},
+ ref:'C2・C7 後下縁を結ぶ線から C3–C6 後下縁までの距離の総和 ÷ C2–C7 間距離 ×100。＋は前弯、−は後弯。',
+ dr:d=>{d.seg('C2pwI','C7pwI');['C3pi','C4pi','C5pi','C6pi'].forEach(k=>d.perp(k,'C2pwI','C7pwI'))}},
+{id:'kline',r:'cx',n:'K-line',en:'K-line (OPLL)',lm:['C2cm','C7cm','OPLLp'],
+ f:g=>{const m=-sd(g.p('OPLLp'),g.p('C7cm'),g.p('C2cm'));const r=M(g,m,null,m>0?'OPLL 頂点は K-line より前方':'OPLL 頂点が K-line を越える');r.s=m>0?'ok':'bad';r.st=m>0?'K-line (+)':'K-line (−)';return r},
+ ref:'C2・C7 の脊柱管中点を結ぶ線。OPLL 頂点が線を越えなければ K-line(+)、越えれば K-line(−)：後方除圧単独では改善不良の可能性（距離は前方余裕を＋）。',dr:d=>{d.seg('C2cm','C7cm',.1);d.perp('OPLLp','C2cm','C7cm')}},
+{id:'oplo',r:'cx',n:'OPLL 占拠率',en:'OPLL occupying ratio',lm:['VBpw','OPLLp','SLp'],
+ f:g=>{const v=dist(g.p('VBpw'),g.p('OPLLp'))/dist(g.p('VBpw'),g.p('SLp'))*100;return R(v,'%',v>=60?'bad':v>=40?'warn':'ok')},
+ ref:'OPLL 最大厚 ÷ 同じ高さの脊柱管前後径 ×100。60% 以上で脊髄症・術後成績不良のリスク。',dr:d=>{d.seg('VBpw','SLp')}},
+{id:'torg',r:'cx',n:'Torg-Pavlov 比',en:'Torg-Pavlov ratio',lm:['TP_VBa','TP_VBp','TP_SL'],
+ f:g=>{const v=dist(g.p('TP_VBp'),g.p('TP_SL'))/dist(g.p('TP_VBa'),g.p('TP_VBp'));return R(v,'',v<0.8?'bad':'ok',v<0.8?'発育性脊柱管狭窄':'')},
+ ref:'脊柱管前後径 ÷ 椎体前後径（通常 C5）。0.8 未満で発育性脊柱管狭窄。拡大率の影響を受けない。',dr:d=>{d.seg('TP_VBa','TP_VBp');d.seg('TP_VBp','TP_SL')}},
+{id:'canal',r:'cx',n:'脊柱管前後径',en:'Canal AP diameter',lm:['TP_VBp','TP_SL'],
+ f:g=>M(g,dist(g.p('TP_VBp'),g.p('TP_SL')),v=>v<12?'bad':v<13?'warn':'ok'),
+ ref:'椎体後縁中点–棘突起椎弓線（通常 C5）。12 mm 未満（〜13 mm）で発育性狭窄。X 線拡大率に注意。',dr:d=>d.seg('TP_VBp','TP_SL')},
+/* --- thoracic --- */
+{id:'tk412',r:'tx',n:'胸椎後弯 T4–12',en:'Thoracic kyphosis T4-12',lm:['T4sup','T12inf'],
+ f:g=>{const v=kyph(g,'T4sup','T12inf');return R(v,'°',v<20||v>40?'warn':'ok','後弯を＋')},ref:'T4 上終板–T12 下終板（後弯を＋）。健常 約20–40°。'},
+{id:'tk512',r:'tx',n:'胸椎後弯 T5–12',en:'Thoracic kyphosis T5-12',lm:['T5sup','T12inf'],
+ f:g=>{const v=kyph(g,'T5sup','T12inf'),m=v<10?'−':v>40?'+':'N';return R(v,'°',m==='N'?'ok':'warn','後弯を＋','Lenke '+m)},
+ ref:'Lenke 矢状面修飾子：10° 未満（−）、10–40°（N）、40° 超（＋）。'},
+{id:'tk112',r:'tx',n:'胸椎後弯 T1–12',en:'Thoracic kyphosis T1-12',lm:['T1sup','T12inf'],f:g=>R(kyph(g,'T1sup','T12inf'),'°',null,'後弯を＋'),ref:'T1 上終板–T12 下終板（後弯を＋）。'},
+{id:'tk25',r:'tx',n:'上位胸椎後弯 T2–5',en:'Proximal thoracic kyphosis',lm:['T2sup','T5inf'],
+ f:g=>{const v=kyph(g,'T2sup','T5inf');return R(v,'°',v>=20?'warn':'ok','後弯を＋',v>=20?'構造的 PT 基準':'')},ref:'T2 上終板–T5 下終板。+20° 以上は上位胸椎カーブの構造的基準（Lenke）。'},
+{id:'tlk',r:'tx',n:'胸腰椎移行部後弯 T10–L2',en:'Thoracolumbar kyphosis',lm:['T10sup','L2inf'],
+ f:g=>{const v=kyph(g,'T10sup','L2inf');return R(v,'°',v>=20?'bad':'ok','後弯を＋',v>=20?'構造的 TL 基準':'')},ref:'T10 上終板–L2 下終板（後弯を＋）。正常 約0°（±10°）、+20° 以上は構造的（Lenke）。'},
+{id:'pjk',r:'tx',n:'PJK 角',en:'Proximal junctional angle',lm:['UIVinf','UIV2sup'],
+ f:g=>{const v=kyph(g,'UIV2sup','UIVinf');return R(v,'°',v>=10?'warn':'ok','後弯を＋')},ref:'UIV 下終板–UIV+2 上終板（後弯を＋）。10° 以上かつ術前より 10° 以上増加で PJK。'},
+/* --- lumbar / pelvis --- */
+{id:'pi',r:'lx',n:'PI（骨盤形態角）',en:'Pelvic incidence',lm:['S1sup','Hip'],f:g=>R(pel(g).PI,'°'),
+ ref:'S1 上終板中点の垂線と、同点–骨頭中心線のなす角（= PT + SS）。姿勢で変化しない形態パラメータ。平均 約50°（範囲 35–85°）。',
+ dr:d=>{d.norm('S1sup');d.seg('Hip','S1sup')}},
+{id:'pt',r:'lx',n:'PT（骨盤傾斜角）',en:'Pelvic tilt',lm:['S1sup','Hip'],
+ f:g=>{const v=pel(g).PT;return R(v,'°',v<20?'ok':v<=30?'warn':'bad','後傾を＋','SRS-Schwab '+(v<20?'0':v<=30?'+':'++'))},
+ ref:'鉛直線と、骨頭中心–S1 上終板中点線のなす角（後傾を＋）。SRS-Schwab：20° 未満（0）、20–30°（＋）、30° 超（＋＋）。',dr:d=>{d.seg('Hip','S1sup');d.vert('Hip')}},
+{id:'ss',r:'lx',n:'SS（仙骨傾斜角）',en:'Sacral slope',lm:['S1sup'],f:g=>R(-th(g.l('S1sup')),'°'),
+ ref:'S1 上終板の水平に対する傾き。平均 約40°。Roussouly 分類の基準。',dr:d=>d.hor('S1sup')},
+{id:'ll',r:'lx',n:'腰椎前弯 L1–S1',en:'Lumbar lordosis',lm:['L1sup','S1sup'],f:g=>R(lord(g,'L1sup','S1sup'),'°',null,'前弯を＋'),
+ ref:'L1 上終板–S1 上終板（Cobb 法, 前弯を＋）。'},
+{id:'ll15',r:'lx',n:'腰椎前弯 L1–L5',en:'Lumbar lordosis L1-5',lm:['L1sup','L5inf'],f:g=>R(lord(g,'L1sup','L5inf'),'°',null,'前弯を＋'),ref:'L1 上終板–L5 下終板（前弯を＋）。'},
+{id:'lll',r:'lx',n:'下位腰椎前弯 L4–S1',en:'Lower lumbar lordosis',lm:['L4sup','S1sup'],f:g=>R(lord(g,'L4sup','S1sup'),'°',null,'前弯を＋'),
+ ref:'L4 上終板–S1 上終板。全腰椎前弯の約 2/3 を占める。'},
+{id:'ldi',r:'lx',n:'LDI（前弯分布指数）',en:'Lordosis distribution index',lm:['L1sup','L4sup','S1sup'],
+ f:g=>{const v=lord(g,'L4sup','S1sup')/lord(g,'L1sup','S1sup')*100;return R(v,'%',v>=50&&v<=80?'ok':'warn')},ref:'L4–S1 前弯 ÷ L1–S1 前弯 ×100。正常 50–80%（GAP スコアの項目）。'},
+{id:'pill',r:'lx',n:'PI − LL',en:'PI-LL mismatch',lm:['S1sup','Hip','L1sup'],
+ f:g=>{const v=pel(g).PI-lord(g,'L1sup','S1sup');return R(v,'°',v<10?'ok':v<=20?'warn':'bad','','SRS-Schwab '+(v<10?'0':v<=20?'+':'++'))},
+ ref:'SRS-Schwab：10° 未満（0）、10–20°（＋）、20° 超（＋＋）。'},
+{id:'llt',r:'lx',n:'目標腰椎前弯',en:'Target LL from PI',lm:['S1sup','Hip'],
+ f:g=>{const pi=pel(g).PI;let t='GAP の理想 LL '+f1(0.62*pi+29)+'°';if(g.has('L1sup'))t+=' / 現在 '+f1(lord(g,'L1sup','S1sup'))+'°';return R(f1(pi-9)+'〜'+f1(pi+9),'°',null,t)},
+ ref:'Schwab の PI ± 9°、GAP の理想 LL = 0.62 × PI + 29。'},
+{id:'disc34',r:'lx',n:'L3/4 椎間角・椎間板高',en:'L3/4 disc angle',lm:['L3inf','L4sup'],f:g=>disc(g,'L3inf','L4sup'),ref:'上位椎下終板と下位椎上終板のなす角（前弯を＋）と前方・後方椎間板高。'},
+{id:'disc45',r:'lx',n:'L4/5 椎間角・椎間板高',en:'L4/5 disc angle',lm:['L4inf','L5sup'],f:g=>disc(g,'L4inf','L5sup'),ref:'上位椎下終板と下位椎上終板のなす角（前弯を＋）と前方・後方椎間板高。'},
+{id:'disc5s',r:'lx',n:'L5/S1 椎間角・椎間板高',en:'L5/S1 disc angle',lm:['L5inf','S1sup'],f:g=>disc(g,'L5inf','S1sup'),ref:'上位椎下終板と下位椎上終板のなす角（前弯を＋）と前方・後方椎間板高。'},
+{id:'slip34',r:'lx',n:'L3/4 すべり率',en:'Slip % (Meyerding)',lm:['L3inf','L4sup'],f:g=>slip(g,'L3inf','L4sup'),
+ ref:'上位椎後下縁の、下位椎上終板に沿った前方移動量 ÷ 終板長 ×100（Taillard 法）。Meyerding I: 25% 未満, II: 25–50%, III: 50–75%, IV: 75–100%, V: 100% 超。負は後方すべり。',dr:d=>d.perp1('L3inf','L4sup')},
+{id:'slip45',r:'lx',n:'L4/5 すべり率',en:'Slip % (Meyerding)',lm:['L4inf','L5sup'],f:g=>slip(g,'L4inf','L5sup'),
+ ref:'上位椎後下縁の、下位椎上終板に沿った前方移動量 ÷ 終板長 ×100（Taillard 法）。Meyerding I: 25% 未満, II: 25–50%, III: 50–75%, IV: 75–100%, V: 100% 超。負は後方すべり。',dr:d=>d.perp1('L4inf','L5sup')},
+{id:'slip5s',r:'lx',n:'L5/S1 すべり率',en:'Slip % (Meyerding)',lm:['L5inf','S1sup'],f:g=>slip(g,'L5inf','S1sup'),
+ ref:'上位椎後下縁の、下位椎上終板に沿った前方移動量 ÷ 終板長 ×100（Taillard 法）。Meyerding I: 25% 未満, II: 25–50%, III: 50–75%, IV: 75–100%, V: 100% 超。負は後方すべり。',dr:d=>d.perp1('L5inf','S1sup')},
+{id:'sla',r:'lx',n:'すべり角（Boxall）',en:'Slip angle',lm:['L5inf','S1pwS','S1pwI'],
+ f:g=>{const w=sub(g.p('S1pwS'),g.p('S1pwI')),n={x:w.y,y:-w.x};const v=nd(ang(n)-th(g.l('L5inf')));return R(v,'°',v>10?'warn':'ok','後弯を＋')},
+ ref:'L5 下終板と S1 後壁の垂線のなす角（後弯を＋）。高度すべり症で増大し、進行・不安定性の指標。',dr:d=>{d.seg('S1pwS','S1pwI',.4)}},
+{id:'sta',r:'lx',n:'仙骨テーブル角',en:'Sacral table angle',lm:['S1sup','S1pwS','S1pwI'],
+ f:g=>{const L=g.l('S1sup');return R(btw(sub(L.A,L.P),sub(g.p('S1pwI'),g.p('S1pwS'))),'°')},
+ ref:'S1 上終板と S1 後壁のなす角。平均 約95–100°。小さいほど仙骨形成不全（高度すべり症の素因）。',dr:d=>d.seg('S1pwS','S1pwI',.2)},
+/* --- global sagittal --- */
+{id:'sva',r:'gl',n:'SVA（C7 鉛直線）',en:'Sagittal vertical axis',lm:['C7c','S1pwS'],
+ f:g=>{const v=g.p('C7c').x-g.p('S1pwS').x;const r=M(g,v,x=>x<40?'ok':x<=95?'warn':'bad','前方を＋');if(g.mmpp)r.st='SRS-Schwab '+(r.v<40?'0':r.v<=95?'+':'++');return r},
+ ref:'C7 椎体中心の鉛直線と S1 後上縁の水平距離（前方を＋）。SRS-Schwab：40 mm 未満（0）、40–95 mm（＋）、95 mm 超（＋＋）。',dr:d=>{d.vert('C7c');d.vert('S1pwS')}},
+{id:'c2sva',r:'gl',n:'C2 SVA',en:'C2 sagittal vertical axis',lm:['C2c','S1pwS'],
+ f:g=>M(g,g.p('C2c').x-g.p('S1pwS').x,null,'前方を＋'),ref:'C2 椎体中心の鉛直線と S1 後上縁の水平距離（前方を＋）。',dr:d=>{d.vert('C2c');d.vert('S1pwS')}},
+{id:'tpa',r:'gl',n:'TPA（T1 骨盤角）',en:'T1 pelvic angle',lm:['T1c','Hip','S1sup'],
+ f:g=>{const v=pa(g,'T1c');return R(v,'°',v<14?'ok':v<=20?'warn':'bad')},
+ ref:'骨頭中心–T1 椎体中心線と骨頭中心–S1 上終板中点線のなす角。PT や膝屈曲による代償の影響を受けにくい。TPA 20° ≒ SVA 46 mm・ODI 40 相当（Protopsaltis）。',dr:d=>{d.seg('Hip','T1c');d.seg('Hip','S1sup')}},
+{id:'t4pa',r:'gl',n:'T4PA',en:'T4 pelvic angle',lm:['T4c','Hip','S1sup'],f:g=>R(pa(g,'T4c'),'°'),
+ ref:'骨頭中心–T4 椎体中心線と骨頭中心–S1 中点線のなす角。T4PA と L1PA の差は ±4° 以内が目標。',dr:d=>{d.seg('Hip','T4c');d.seg('Hip','S1sup')}},
+{id:'l1pa',r:'gl',n:'L1PA',en:'L1 pelvic angle',lm:['L1c','Hip','S1sup'],
+ f:g=>{const v=pa(g,'L1c'),id=0.5*pel(g).PI-21;return R(v,'°',Math.abs(v-id)<=3?'ok':'warn','目標 0.5×PI−21 = '+f1(id)+'°')},
+ ref:'骨頭中心–L1 椎体中心線と骨頭中心–S1 中点線のなす角。目標 L1PA ≒ 0.5 × PI − 21°（±3°）。',dr:d=>{d.seg('Hip','L1c');d.seg('Hip','S1sup')}},
+{id:'t4l1',r:'gl',n:'T4PA − L1PA',en:'T4-L1PA mismatch',lm:['T4c','L1c','Hip','S1sup'],
+ f:g=>{const v=pa(g,'T4c')-pa(g,'L1c');return R(v,'°',Math.abs(v)<=4?'ok':'warn')},ref:'±4° 以内で上位胸椎と腰椎のアライメントが調和。'},
+{id:'c2pa',r:'gl',n:'C2PA',en:'C2 pelvic angle',lm:['C2c','Hip','S1sup'],f:g=>R(pa(g,'C2c'),'°'),
+ ref:'骨頭中心–C2 椎体中心線と骨頭中心–S1 中点線のなす角。TPA と高相関、頚椎を含む全体のバランス指標。',dr:d=>{d.seg('Hip','C2c');d.seg('Hip','S1sup')}},
+{id:'gt',r:'gl',n:'Global tilt',en:'GT',lm:['C7c','S1sup','Hip'],
+ f:g=>{const p=pel(g),v=p.PT+tilt(sub(g.p('C7c'),p.M));return R(v,'°',v<25?'ok':'bad','理想 GT（0.48×PI−15）= '+f1(0.48*p.PI-15)+'°')},
+ ref:'C7 中心–S1 中点線と S1 中点–骨頭中心線のなす角。正常 25° 未満。',dr:d=>{d.seg('C7c','S1sup');d.seg('S1sup','Hip')}},
+{id:'odha',r:'gl',n:'OD–HA',en:'Odontoid-hip axis angle',lm:['DensTip','Hip'],
+ f:g=>{const v=tilt(sub(g.p('DensTip'),g.p('Hip')));return R(v,'°',v>=-5&&v<=3?'ok':'warn','前方を＋')},
+ ref:'骨頭中心–歯突起先端線と鉛直線のなす角（前方を＋）。頭部重心線の近似。健常では概ね −5〜+3°。',dr:d=>{d.seg('Hip','DensTip');d.vert('Hip')}},
+{id:'srs',r:'gl',n:'SRS-Schwab 分類（矢状面）',en:'SRS-Schwab modifiers',lm:['S1sup','Hip','L1sup','C7c'],
+ f:g=>{const p=pel(g),m1=p.PI-lord(g,'L1sup','S1sup'),sva=g.p('C7c').x-g.p('S1pwS').x;
+   const a=m1<10?0:m1<=20?1:2,b=p.PT<20?0:p.PT<=30?1:2;let c=null;if(g.mmpp){const s=sva*g.mmpp;c=s<40?0:s<=95?1:2}
+   const sy=['0','+','++'],w=Math.max(a,b,c??0);
+   return R('PI-LL '+sy[a]+' / PT '+sy[b]+' / SVA '+(c==null?'?':sy[c]),'',['ok','warn','bad'][w],c==null?'SVA は較正後に判定':'')},
+ ref:'SRS-Schwab 成人脊柱変形分類の矢状面修飾子（PI−LL / PT / SVA）。冠状面カーブタイプは正面像で判定。'},
+{id:'gap',r:'gl',n:'GAP スコア',en:'Global Alignment and Proportion',lm:['S1sup','Hip','L1sup','L4sup','C7c'],
+ f:g=>{const p=pel(g),LL=lord(g,'L1sup','S1sup'),LDI=lord(g,'L4sup','S1sup')/LL*100,GT=p.PT+tilt(sub(g.p('C7c'),p.M));
+   const rpv=p.SS-(0.59*p.PI+9),rll=LL-(0.62*p.PI+29),rsa=GT-(0.48*p.PI-15);
+   const s1=rpv< -15?3:rpv< -7?2:rpv<=5?0:1, s2=rll< -25?3:rll< -14?2:rll<=11?0:3, s3=LDI<40?2:LDI<50?1:LDI<=80?0:3, s4=rsa>18?3:rsa>10?1:rsa>=-7?0:1;
+   const age=g.age, s5=age==null?0:age>=60?1:0, tot=s1+s2+s3+s4+s5;
+   return R(tot,'点',tot<=2?'ok':tot<=6?'warn':'bad','RPV '+f1(rpv)+'°('+s1+') · RLL '+f1(rll)+'°('+s2+') · LDI '+f1(LDI)+'%('+s3+') · RSA '+f1(rsa)+'°('+s4+') · 年齢('+(age==null?'未入力→0':s5)+')',tot<=2?'調和':tot<=6?'中等度不調和':'重度不調和')},
+ ref:'GAP スコア（Yilgor 2017）：RPV・RLL・LDI・RSA・年齢因子の合計。0–2 調和、3–6 中等度不調和、7 以上 重度不調和。理想値 SS = 0.59PI+9、LL = 0.62PI+29、GT = 0.48PI−15。年齢は設定で入力。'},
+{id:'rous',r:'gl',n:'Roussouly 分類',en:'Roussouly type',lm:['S1sup'],
+ f:g=>{const ss=-th(g.l('S1sup'));let t,st;if(ss<35){t='Type 1 または 2';st='前弯頂点が L4 以下で胸腰椎後弯 → 1、平坦 → 2'}else if(ss<=45){t='Type 3';st='';if(g.has('Hip')){const p=pel(g);if(p.PT<5&&p.PI<50){t='Type 3 AP';st='前傾型（PI＜50°, PT＜5°）'}}}else{t='Type 4';st=''}
+   return R(t,'',null,'SS '+f1(ss)+'°'+(st?' / '+st:''))},
+ ref:'SS に基づく分類：Type 1・2（SS 35° 未満）、Type 3（35–45°）、Type 4（45° 超）。Type 1 と 2 は前弯頂点と胸腰椎移行部の形で判別。'},
+/* --- coronal --- */
+{id:'cobbPT',r:'co',n:'Cobb 角 上位胸椎',en:'Proximal thoracic Cobb',lm:['AP_ptU','AP_ptL'],f:g=>cobb(g,'AP_ptU','AP_ptL'),ref:'上位・下位終椎の終板のなす角。10° 以上で側弯症。'},
+{id:'cobbMT',r:'co',n:'Cobb 角 主胸椎',en:'Main thoracic Cobb',lm:['AP_mtU','AP_mtL'],f:g=>cobb(g,'AP_mtU','AP_mtL'),
+ ref:'上位・下位終椎の終板のなす角。10° 以上で側弯症。思春期特発性では 25–40° 装具、45–50° 以上で手術を考慮。'},
+{id:'cobbTL',r:'co',n:'Cobb 角 胸腰椎/腰椎',en:'TL/L Cobb',lm:['AP_tlU','AP_tlL'],f:g=>cobb(g,'AP_tlU','AP_tlL'),ref:'上位・下位終椎の終板のなす角。成人脊柱変形の主カーブ評価にも。'},
+{id:'cobbFr',r:'co',n:'Fractional curve L4–S1',en:'Lumbosacral fractional curve',lm:['AP_L4sup','AP_S1sup'],f:g=>cobb(g,'AP_L4sup','AP_S1sup'),ref:'L4 上終板と仙骨上縁のなす角。成人変性側弯で神経根症状と関連。'},
+{id:'c7csvl',r:'co',n:'冠状面バランス（C7–CSVL）',en:'Coronal balance',lm:['AP_C7c','AP_S1c'],
+ f:g=>{const d=g.p('AP_C7c').x-g.p('AP_S1c').x;const r=M(g,Math.abs(d),v=>v<=20?'ok':v<=40?'warn':'bad',Math.abs(d)<1e-6?'':(d>0?'右':'左')+'へ偏位');return r},
+ ref:'C7 椎体中心と CSVL（仙骨上縁中点の鉛直線）の水平距離。成人で 30–40 mm 超は冠状面アンバランス。',dr:d=>{d.vert('AP_S1c');d.vert('AP_C7c')}},
+{id:'avtT',r:'co',n:'AVT 胸椎',en:'Thoracic apical translation',lm:['AP_apexT','AP_C7c'],
+ f:g=>{const d=g.p('AP_apexT').x-g.p('AP_C7c').x;return M(g,Math.abs(d),null,(d>0?'右':'左')+'方')},ref:'胸椎頂椎中心と C7 鉛直線（C7PL）の水平距離。',dr:d=>{d.vert('AP_C7c');d.hseg('AP_apexT','AP_C7c')}},
+{id:'avtL',r:'co',n:'AVT 腰椎',en:'Lumbar apical translation',lm:['AP_apexL','AP_S1c'],
+ f:g=>{const d=g.p('AP_apexL').x-g.p('AP_S1c').x;return M(g,Math.abs(d),null,(d>0?'右':'左')+'方')},ref:'腰椎頂椎中心と CSVL の水平距離。',dr:d=>{d.vert('AP_S1c');d.hseg('AP_apexL','AP_S1c')}},
+{id:'t1t',r:'co',n:'T1 tilt',en:'T1 tilt',lm:['AP_T1sup'],f:g=>{const a=th(g.l('AP_T1sup'));return R(Math.abs(a),'°',null,a>0?'右上がり':a<0?'左上がり':'')},ref:'T1 上終板の水平に対する傾き。',dr:d=>d.hor('AP_T1sup')},
+{id:'clav',r:'co',n:'Clavicle angle',en:'Clavicle angle',lm:['AP_clavR','AP_clavL'],f:g=>{const o=lr(g,'AP_clavR','AP_clavL');return R(o.an,'°',null,o.side)},
+ ref:'左右鎖骨最高点を結ぶ線と水平線のなす角。術後肩バランスの予測指標。',dr:d=>{d.seg('AP_clavR','AP_clavL');d.hor('AP_clavR')}},
+{id:'rsh',r:'co',n:'肩高差（RSH）',en:'Radiographic shoulder height',lm:['AP_shR','AP_shL'],
+ f:g=>{const o=lr(g,'AP_shR','AP_shL');return M(g,Math.abs(o.dy),v=>v<10?'ok':v<=20?'warn':'bad',o.side)},
+ ref:'左右の肩鎖関節直上の軟部陰影の高さの差。10–20 mm 軽度、20 mm 超で肩バランス不良。',dr:d=>{d.hor('AP_shR');d.hor('AP_shL')}},
+{id:'pob',r:'co',n:'骨盤傾斜（腸骨稜）',en:'Pelvic obliquity',lm:['AP_icR','AP_icL'],
+ f:g=>{const o=lr(g,'AP_icR','AP_icL');const r=R(o.an,'°',null,o.side);r.t+=' / 高さの差 '+(g.mmpp?f1(Math.abs(o.dy)*g.mmpp)+' mm':f1(Math.abs(o.dy))+' px');return r},
+ ref:'左右腸骨稜最高点を結ぶ線の傾きと高さの差。',dr:d=>{d.seg('AP_icR','AP_icL');d.hor('AP_icR')}},
+{id:'lld',r:'co',n:'大腿骨頭高差（脚長差）',en:'Femoral head height difference',lm:['AP_fhR','AP_fhL'],
+ f:g=>{const o=lr(g,'AP_fhR','AP_fhL');return M(g,Math.abs(o.dy),v=>v<10?'ok':'warn',o.side)},ref:'左右大腿骨頭頂点の高さの差（立位正面像）。脚長差・骨盤傾斜の目安。',dr:d=>{d.hor('AP_fhR');d.hor('AP_fhL')}},
+{id:'nash',r:'co',n:'Nash-Moe 回旋（近似）',en:'Vertebral rotation',lm:['AP_vCx','AP_vCc','AP_ped'],
+ f:g=>{const a=g.p('AP_vCx'),b=g.p('AP_vCc'),u=sub(b,a),f=dot(sub(g.p('AP_ped'),a),unit(u))/(len(u)/2);
+   const gr=f<1/3?'Grade 0–I':f<2/3?'Grade II':f<=1?'Grade III':'Grade IV';return R(gr,'',f<1/3?'ok':f<2/3?'warn':'bad','椎弓根位置 '+f1(f*100)+'%（凸側縁→正中）')},
+ ref:'凸側椎弓根が正中へ移動する程度で回旋を評価。椎体半幅を3分割した近似判定。0 と I は凹側椎弓根の見え方で区別。',dr:d=>d.seg('AP_vCx','AP_vCc')},
+{id:'lenke',r:'co',n:'Lenke 腰椎修飾子',en:'Lenke lumbar modifier',lm:['AP_S1c','AP_laPm','AP_laE'],
+ f:g=>{const c=g.p('AP_S1c').x,p=g.p('AP_laPm').x,e=g.p('AP_laE').x,s=Math.sign(e-p)||1,a=s*(c-p),b=s*(c-e);
+   const m=a<0?'A':b<=0?'B':'C';return R(m,'',null,m==='A'?'CSVL が両椎弓根の間':m==='B'?'CSVL が凹側椎弓根〜椎体に接する':'CSVL が椎体の完全に外側')},
+ ref:'CSVL と腰椎頂椎の位置関係。A: 両椎弓根の間、B: 凹側椎弓根内縁〜椎体外縁、C: 椎体より完全に凹側外。',dr:d=>d.vert('AP_S1c')},
+/* --- fracture --- */
+{id:'lka',r:'fx',n:'局所後弯角',en:'Local kyphotic angle',lm:['FX_U','FX_L'],
+ f:g=>{const v=kyph(g,'FX_U','FX_L');return R(v,'°',v>=30?'bad':v>=20?'warn':'ok','後弯を＋')},ref:'骨折椎の上位椎上終板–下位椎下終板（Cobb 法, 後弯を＋）。20–30° 以上で不安定性を考慮。'},
+{id:'wedge',r:'fx',n:'椎体楔状角',en:'Vertebral wedge angle',lm:['FX_sup','FX_inf'],f:g=>R(kyph(g,'FX_sup','FX_inf'),'°',null,'後弯を＋'),ref:'骨折椎の上下終板のなす角（後弯を＋）。'},
+{id:'fxh',r:'fx',n:'前方椎体高 圧潰率',en:'Anterior height loss',lm:['FX_sup','FX_inf'],
+ f:g=>{const a=g.l('FX_sup'),b=g.l('FX_inf'),ha=dist(a.A,b.A),hp=dist(a.P,b.P),loss=(1-ha/hp)*100;
+   const gr=loss<20?'':loss<25?'Genant 1':loss<=40?'Genant 2':'Genant 3';return R(loss,'%',loss<20?'ok':loss<=40?'warn':'bad','前方/後方比 '+(ha/hp).toFixed(2),gr)},
+ ref:'圧潰率 =（1 − 前方椎体高 / 後方椎体高）×100。Genant：20–25% G1、25–40% G2、40% 超 G3（原法は隣接椎との比較）。'},
+/* --- free --- */
+{id:'fa1',r:'free',n:'2直線のなす角 A',en:'Angle between lines',lm:['FR_l1','FR_l2'],f:g=>{const a=btw(sub(g.l('FR_l1').A,g.l('FR_l1').P),sub(g.l('FR_l2').A,g.l('FR_l2').P)),v=Math.min(a,180-a);return R(v,'°',null,'補角 '+f1(180-v)+'°')},ref:'2本の直線（各2点）のなす角（鋭角側）。'},
+{id:'fa2',r:'free',n:'2直線のなす角 B',en:'Angle between lines',lm:['FR_l3','FR_l4'],f:g=>{const a=btw(sub(g.l('FR_l3').A,g.l('FR_l3').P),sub(g.l('FR_l4').A,g.l('FR_l4').P)),v=Math.min(a,180-a);return R(v,'°',null,'補角 '+f1(180-v)+'°')},ref:'2本の直線（各2点）のなす角（鋭角側）。'},
+{id:'f3p',r:'free',n:'3点角度',en:'Three-point angle',lm:['FR_a','FR_b','FR_c'],f:g=>{const b=g.p('FR_b');return R(btw(sub(g.p('FR_a'),b),sub(g.p('FR_c'),b)),'°')},ref:'A–B–C の B における角度。',dr:d=>{d.seg('FR_a','FR_b');d.seg('FR_b','FR_c')}},
+{id:'fd1',r:'free',n:'距離 1',en:'Distance',lm:['FR_d1'],f:g=>{const l=g.l('FR_d1');return M(g,dist(l.A,l.P))},ref:'2点間距離。'},
+{id:'fd2',r:'free',n:'距離 2',en:'Distance',lm:['FR_d2'],f:g=>{const l=g.l('FR_d2');return M(g,dist(l.A,l.P))},ref:'2点間距離。'},
+{id:'frat',r:'free',n:'距離比（1 ÷ 2）',en:'Ratio',lm:['FR_d1','FR_d2'],f:g=>{const a=g.l('FR_d1'),b=g.l('FR_d2');return R(dist(a.A,a.P)/dist(b.A,b.P),'')},ref:'距離1 ÷ 距離2。較正不要。'},
+{id:'fpl',r:'free',n:'点と直線の距離',en:'Point-to-line distance',lm:['FR_pp','FR_pl'],f:g=>{const l=g.l('FR_pl');return M(g,Math.abs(sd(g.p('FR_pp'),l.P,l.A)))},ref:'測定点から基準線への垂線の長さ。',dr:d=>d.perpL('FR_pp','FR_pl')},
+{id:'ftilt',r:'free',n:'水平に対する傾き',en:'Tilt from horizontal',lm:['FR_t'],f:g=>{const l=g.l('FR_t'),a=Math.abs(nd(ang(sub(l.A,l.P)))),v=a>90?180-a:a;return R(v,'°',null,'鉛直から '+f1(90-v)+'°')},ref:'直線の水平線に対する傾き（鋭角）。',dr:d=>d.hor('FR_t')},
+];
+const PID={};P.forEach(p=>PID[p.id]=p);
+const DYN=[{b:'c27',k:'a'},{b:'c27h',k:'a'},{b:'oc2',k:'a'},{b:'c12',k:'a'},{b:'adi',k:'adi'},{b:'padi',k:'d'},
+  {b:'disc34',k:'a'},{b:'disc45',k:'a'},{b:'disc5s',k:'a'},{b:'slip34',k:'s'},{b:'slip45',k:'s'},{b:'slip5s',k:'s'},{b:'ll',k:'a'}];
+
+/* ================= state ================= */
+const SLOTS=[{id:'lat',name:'側面',view:'s'},{id:'ap',name:'正面',view:'c'},{id:'flex',name:'前屈',view:'s'},{id:'ext',name:'後屈',view:'s'}];
+const S={};SLOTS.forEach(s=>S[s.id]={id:s.id,base:null,view:null,pts:{},mmpp:null,calSrc:'',facing:'auto',demo:false,vw:null,fname:'',adjKey:''});
+const st={slot:'lat',region:'lx',sel:'pi',mode:'idle',q:null,age:'',apStd:true,adj:{b:0,c:1,inv:false},labels:false,sheet:'mid',pid:null,sid:null,trReg:'key',trSel:null};
+let DBI={patients:[],studies:[]};const REC={};
+const hist=[];
+const cur=()=>S[st.slot];
+const slotView=id=>SLOTS.find(s=>s.id===id).view;
+
+function complete(k,a){const n=LM[k]?LM[k].subs.length:1;if(!a)return false;for(let i=0;i<n;i++)if(!a[i])return false;return true}
+function getPts(sl,k){const r=sl.pts[k];if(r&&complete(k,r))return r;const d=DER[k];if(!d)return null;
+  const a=sl.pts[d[0]];if(!complete(d[0],a))return null;if(d[1]===1)return[a[1]];if(d[1]==='m')return[mid(a[0],a[1])];
+  const b=sl.pts[d[1]];if(!complete(d[1],b))return null;return[{x:(a[0].x+a[1].x+b[0].x+b[1].x)/4,y:(a[0].y+a[1].y+b[0].y+b[1].y)/4}]}
+function facing(sl){if(sl.facing==='R')return 1;if(sl.facing==='L')return -1;let v=0;
+  for(const [a,b] of ANTPOST){const A=getPts(sl,a),B=getPts(sl,b);if(A&&B)v+=2*Math.sign(A[0].x-B[0].x)}
+  for(const k in sl.pts){const d=LM[k];if(!d||d.type!=='ln'||/^(AP_|FR_|_)/.test(k))continue;const a=sl.pts[k];if(complete(k,a))v+=Math.sign(a[0].x-a[1].x)}
+  return v<0?-1:1}
+function makeG(sl,view){
+  const ap=sl.apStd!=null?sl.apStd:st.apStd,fx=view==='s'?facing(sl):view==='c'?(ap?-1:1):1;
+  const F=p=>({x:p.x*fx,y:-p.y});
+  return{mmpp:sl.mmpp,age:sl.age!==undefined?sl.age:ageFor(st.sid),has:k=>!!getPts(sl,k),
+    p:k=>{const a=getPts(sl,k);return a.length>1?F(mid(a[0],a[1])):F(a[0])},
+    l:k=>{const a=getPts(sl,k);let A=F(a[0]),B=F(a[1]);if(view!=='f'&&A.x<B.x){const t=A;A=B;B=t}return{A,P:B}}};
+}
+function regView(rid){return REG.find(r=>r.id===rid).v}
+function compute(p,sl){if(!sl||!(sl.base||sl.has))return null;for(const k of p.lm)if(!getPts(sl,k))return null;
+  const rv=regView(p.r),view=rv==='f'?'f':rv==='c'?'c':'s';
+  try{const r=p.f(makeG(sl,view));if(r&&typeof r.v==='number'&&!isFinite(r.v))return null;return r}catch(e){console.warn(p.id,e);return null}}
+function missing(p,sl){let n=0;for(const k of p.lm)if(!getPts(sl,k)){const r=sl.pts[k]||[];LM[k].subs.forEach((_,i)=>{if(!r[i])n++})}return n}
+function fmtV(r){if(typeof r.v==='string')return r.v;const d=r.u===''?2:(r.u==='点'?0:1);return(Math.round(r.v*10**d)/10**d).toFixed(d)}
+function unitTxt(r){return r.u==='px'?'px':r.u}
+
+/* ================= canvas ================= */
+const cv=document.getElementById('cv'),stage=document.getElementById('stage'),lp=document.getElementById('loupe');
+let DPR=1,CW=0,CH=0,preview=null;
+function resize(){const r=stage.getBoundingClientRect();DPR=Math.min(window.devicePixelRatio||1,3);CW=r.width;CH=r.height;
+  cv.width=Math.round(CW*DPR);cv.height=Math.round(CH*DPR);lp.width=132*DPR;lp.height=132*DPR;
+  const sl=cur();if(sl.base&&!sl.vw)fit(sl);render()}
+new ResizeObserver(resize).observe(stage);
+function fit(sl,box){if(!sl.base||!CW)return;let x0=0,y0=0,w=sl.base.width,h=sl.base.height;
+  if(box){x0=box.x0;y0=box.y0;w=box.x1-box.x0;h=box.y1-box.y0}
+  const s=Math.min(CW/w,CH/h)*(box?0.7:0.96);sl.vw={s,tx:(CW-w*s)/2-x0*s,ty:(CH-h*s)/2-y0*s}}
+const i2s=(sl,p)=>({x:p.x*sl.vw.s+sl.vw.tx,y:p.y*sl.vw.s+sl.vw.ty});
+const s2i=(sl,p)=>({x:(p.x-sl.vw.tx)/sl.vw.s,y:(p.y-sl.vw.ty)/sl.vw.s});
+
+function applyAdj(sl){if(!sl.base)return;const a=st.adj,key=a.b+'|'+a.c+'|'+a.inv;if(sl.view&&sl.adjKey===key)return;sl.adjKey=key;
+  if(a.b===0&&a.c===1&&!a.inv){sl.view=sl.base;return}
+  const c=document.createElement('canvas');c.width=sl.base.width;c.height=sl.base.height;const x=c.getContext('2d');x.drawImage(sl.base,0,0);
+  const id=x.getImageData(0,0,c.width,c.height),d=id.data,lut=new Uint8ClampedArray(256);
+  for(let i=0;i<256;i++){let v=(i-128)*a.c+128+a.b;if(a.inv)v=255-v;lut[i]=v}
+  for(let i=0;i<d.length;i+=4){d[i]=lut[d[i]];d[i+1]=lut[d[i+1]];d[i+2]=lut[d[i+2]]}
+  x.putImageData(id,0,0);sl.view=c}
+
+function selParam(){const p=PID[st.sel];if(!p)return null;if(st.region!==p.r)return null;return p}
+function render(){
+  const ctx=cv.getContext('2d');ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#05070a';ctx.fillRect(0,0,cv.width,cv.height);
+  const sl=cur();document.getElementById('empty').hidden=!!sl.base;
+  if(!sl.base){document.getElementById('ztag').textContent='';return}
+  if(!sl.vw)fit(sl);applyAdj(sl);
+  ctx.setTransform(DPR*sl.vw.s,0,0,DPR*sl.vw.s,DPR*sl.vw.tx,DPR*sl.vw.ty);ctx.imageSmoothingEnabled=sl.vw.s<2.5;ctx.drawImage(sl.view,0,0);
+  ctx.setTransform(DPR,0,0,DPR,0,0);drawOverlay(ctx,sl);
+  document.getElementById('ztag').textContent='×'+(sl.vw.s).toFixed(2);
+}
+const COL={pt:'#f1d264',sel:'#5cc8f5',guide:'rgba(92,200,245,.85)',der:'#e4eaef',cal:'#ff9bd2'};
+function drawOverlay(ctx,sl){
+  const p=st.mode==='measure'?null:selParam(),selK=new Set(p?p.lm:[]);
+  const qk=st.mode==='measure'&&st.q?curItem():null;
+  const S2=q=>i2s(sl,q);
+  ctx.lineCap='round';ctx.lineJoin='round';
+  // guides for selected
+  if(p){const r=compute(p,sl);if(r){const d=guideAPI(ctx,sl);ctx.save();ctx.strokeStyle=COL.guide;ctx.lineWidth=1.4;ctx.setLineDash([6,5]);
+      p.lm.forEach(k=>{if(LM[k].type==='ln')d.seg(k,null,.5)});if(p.dr)p.dr(d);ctx.restore();}}
+  // landmarks
+  const keys=new Set(Object.keys(sl.pts));if(p)p.lm.forEach(k=>keys.add(k));
+  for(const k of keys){const d=LM[k];if(!d)continue;const raw=sl.pts[k],isSel=selK.has(k);const a=getPts(sl,k);const derived=!raw&&a;
+    if(!raw&&!derived)continue;if(derived&&!isSel)continue;
+    const pts=(raw||a).filter(Boolean),sp=pts.map(S2);
+    const col=k==='_cal'?COL.cal:isSel?COL.sel:COL.pt;
+    ctx.globalAlpha=p&&!isSel?0.55:1;
+    if(d.type==='ln'&&sp.length===2){ctx.strokeStyle=col;ctx.lineWidth=isSel?2:1.5;ctx.beginPath();ctx.moveTo(sp[0].x,sp[0].y);ctx.lineTo(sp[1].x,sp[1].y);ctx.stroke()}
+    sp.forEach(s=>{ctx.beginPath();ctx.arc(s.x,s.y,isSel?5:4,0,7);if(derived){ctx.strokeStyle=COL.der;ctx.lineWidth=1.5;ctx.stroke()}else{ctx.fillStyle=col;ctx.fill();ctx.strokeStyle='#000a';ctx.lineWidth=1;ctx.stroke()}});
+    if((st.labels||isSel)&&sp.length){label(ctx,sp[0].x+8,sp[0].y-8,d.name,isSel?COL.sel:COL.pt)}
+    ctx.globalAlpha=1;}
+  // value tag
+  if(p){const r=compute(p,sl);if(r){const a=getPts(sl,p.lm[0]);if(a){const s=S2(a[0]);
+      const txt=p.n.replace(/（.*?）/g,'')+'  '+fmtV(r)+(r.u&&r.u!=='点'?unitTxt(r):r.u);tag(ctx,s.x+12,s.y+18,txt)}}}
+  // measure mode: target
+  if(qk){const raw=sl.pts[qk.k];if(raw)raw.forEach(q=>{if(!q)return;const s=S2(q);ctx.beginPath();ctx.arc(s.x,s.y,5,0,7);ctx.fillStyle=COL.sel;ctx.fill()})}
+  if(preview){const s=S2(preview);ctx.strokeStyle=COL.sel;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(s.x,s.y,14,0,7);ctx.moveTo(s.x-24,s.y);ctx.lineTo(s.x-6,s.y);ctx.moveTo(s.x+6,s.y);ctx.lineTo(s.x+24,s.y);ctx.moveTo(s.x,s.y-24);ctx.lineTo(s.x,s.y-6);ctx.moveTo(s.x,s.y+6);ctx.lineTo(s.x,s.y+24);ctx.stroke()}
+}
+function label(ctx,x,y,t,col){ctx.font='500 11px "IBM Plex Sans JP",system-ui,sans-serif';ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,.75)';ctx.strokeText(t,x,y);ctx.fillStyle=col;ctx.fillText(t,x,y)}
+function tag(ctx,x,y,t){ctx.font='500 13px "IBM Plex Mono",ui-monospace,monospace';const w=ctx.measureText(t).width+12;x=Math.min(x,CW-w-6);y=Math.min(Math.max(y,20),CH-8);
+  ctx.fillStyle='rgba(5,7,10,.82)';ctx.strokeStyle=COL.sel;ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y-16,w,22,6):ctx.rect(x,y-16,w,22);ctx.fill();ctx.stroke();ctx.fillStyle='#e4eaef';ctx.fillText(t,x+6,y)}
+function guideAPI(ctx,sl){
+  const P1=k=>{if(typeof k!=='string')return k;const a=getPts(sl,k);if(!a)return null;return a.length>1?mid(a[0],a[1]):a[0]};
+  const S2=q=>i2s(sl,q);
+  const L=(a,b)=>{const A=S2(a),B=S2(b);ctx.beginPath();ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y);ctx.stroke()};
+  const api={
+    seg(a,b,ext=0){let A,B;if(b==null){const r=getPts(sl,a);if(!r||r.length<2)return;A=r[0];B=r[1]}else{A=P1(a);B=P1(b)}if(!A||!B)return;const v=sub(B,A);L(sub(A,mul(v,ext)),add(B,mul(v,ext)))},
+    perp(p,a,b){const P=P1(p),A=P1(a),B=P1(b);if(!P||!A||!B)return;const F=foot(P,A,B);L(P,F)},
+    perpL(p,k){const r=getPts(sl,k);if(!r)return;api.perp(p,r[0],r[1])},
+    perp1(u,l){const U=getPts(sl,u),Lw=getPts(sl,l);if(!U||!Lw)return;const e=sub(Lw[0],Lw[1]);const n={x:-e.y,y:e.x};L(sub(Lw[1],mul(n,.6)),add(Lw[1],mul(n,.6)));api.perp(U[1],Lw[0],Lw[1])},
+    vert(p){const P=P1(p);if(!P)return;const s=S2(P);ctx.beginPath();ctx.moveTo(s.x,0);ctx.lineTo(s.x,CH);ctx.stroke()},
+    hor(k){const r=getPts(sl,k);let P;if(r&&r.length===2){const A=S2(r[0]),B=S2(r[1]);P=A.x<B.x?A:B;ctx.beginPath();ctx.moveTo(P.x-10,P.y);ctx.lineTo(P.x+Math.max(80,Math.abs(A.x-B.x)*1.4),P.y);ctx.stroke();return}
+      P=P1(k);if(!P)return;const s=S2(P);ctx.beginPath();ctx.moveTo(s.x-70,s.y);ctx.lineTo(s.x+70,s.y);ctx.stroke()},
+    hseg(a,b){const A=P1(a),B=P1(b);if(!A||!B)return;L(A,{x:B.x,y:A.y})},
+    norm(k){const r=getPts(sl,k);if(!r)return;const m=mid(r[0],r[1]),e=sub(r[0],r[1]);const n={x:-e.y,y:e.x};L(sub(m,mul(n,1.6)),add(m,mul(n,1.6)))},
+  };return api}
+
+/* ---------- loupe ---------- */
+function showLoupe(sp,ip){const sl=cur();lp.hidden=false;const left=sp.x>CW/2;lp.style.left=left?'12px':'';lp.style.right=left?'':'12px';
+  lp.style.top=(document.getElementById('prompt').hidden?12:(document.getElementById('prompt').offsetHeight+18))+'px';
+  const x=lp.getContext('2d'),W=lp.width,Z=Math.max(sl.vw.s*3,1.2)*DPR;x.setTransform(1,0,0,1,0,0);x.fillStyle='#000';x.fillRect(0,0,W,W);
+  x.imageSmoothingEnabled=false;x.drawImage(sl.view,ip.x-W/2/Z,ip.y-W/2/Z,W/Z,W/Z,0,0,W,W);
+  // existing landmarks in loupe
+  x.fillStyle=COL.pt;for(const k in sl.pts){(sl.pts[k]||[]).forEach(q=>{if(!q)return;const X=(q.x-ip.x)*Z+W/2,Y=(q.y-ip.y)*Z+W/2;if(X<0||Y<0||X>W||Y>W)return;x.beginPath();x.arc(X,Y,3*DPR,0,7);x.fill()})}
+  x.strokeStyle=COL.sel;x.lineWidth=1.2*DPR;x.beginPath();x.moveTo(W/2,W/2-W*.38);x.lineTo(W/2,W/2-5*DPR);x.moveTo(W/2,W/2+5*DPR);x.lineTo(W/2,W/2+W*.38);
+  x.moveTo(W/2-W*.38,W/2);x.lineTo(W/2-5*DPR,W/2);x.moveTo(W/2+5*DPR,W/2);x.lineTo(W/2+W*.38,W/2);x.stroke()}
+function hideLoupe(){lp.hidden=true}
+
+/* ---------- pointer ---------- */
+const ptrs=new Map();let act=null;
+function evp(e){const r=cv.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+function hitTest(sl,p){let best=null,bd=22;const sel=selParam(),selK=new Set(sel?sel.lm:[]);
+  for(const k in sl.pts){(sl.pts[k]||[]).forEach((q,i)=>{if(!q)return;const s=i2s(sl,q),d=dist(s,p)-(selK.has(k)?6:0);if(d<bd){bd=d;best={k,i}}})}return best}
+cv.addEventListener('pointerdown',e=>{const sl=cur();if(!sl.base)return;cv.setPointerCapture(e.pointerId);const p=evp(e);ptrs.set(e.pointerId,p);
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];act={t:'pinch',d0:dist(a,b)||1,m0:mid(a,b),v0:{...sl.vw}};preview=null;hideLoupe();render();return}
+  if(ptrs.size>2)return;
+  if(e.pointerType==='mouse'&&e.button!==0){act={t:'pan',p0:p,v0:{...sl.vw}};return}
+  if(st.mode==='measure'){act={t:'place'};preview=s2i(sl,p);showLoupe(p,preview);render();return}
+  const h=hitTest(sl,p);
+  if(h){pushHist(sl.id,[h.k]);act={t:'drag',k:h.k,i:h.i,off:sub(sl.pts[h.k][h.i],s2i(sl,p))};showLoupe(p,sl.pts[h.k][h.i]);return}
+  act={t:'pan',p0:p,v0:{...sl.vw}}});
+cv.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId)||!act)return;const sl=cur(),p=evp(e);ptrs.set(e.pointerId,p);
+  if(act.t==='pinch'&&ptrs.size>=2){const [a,b]=[...ptrs.values()],m=mid(a,b),v0=act.v0;const s=clamp(v0.s*dist(a,b)/act.d0,0.02,40);
+    const ip={x:(act.m0.x-v0.tx)/v0.s,y:(act.m0.y-v0.ty)/v0.s};sl.vw={s,tx:m.x-ip.x*s,ty:m.y-ip.y*s}}
+  else if(act.t==='place'){preview=s2i(sl,p);showLoupe(p,preview)}
+  else if(act.t==='drag'){const q=add(s2i(sl,p),act.off);sl.pts[act.k][act.i]=q;showLoupe(p,q)}
+  else if(act.t==='pan'){sl.vw={s:act.v0.s,tx:act.v0.tx+p.x-act.p0.x,ty:act.v0.ty+p.y-act.p0.y}}
+  render()});
+function endPtr(e){if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);const sl=cur();
+  if(act&&act.t==='place'&&e.type==='pointerup'&&preview){place(preview)}
+  if(act&&act.t==='drag'){save();renderUI()}
+  if(act&&act.t==='pinch'){act=ptrs.size?{t:'none'}:null}else if(!ptrs.size)act=null;
+  if(!ptrs.size)act=null;preview=null;hideLoupe();render()}
+cv.addEventListener('pointerup',endPtr);cv.addEventListener('pointercancel',endPtr);
+cv.addEventListener('wheel',e=>{const sl=cur();if(!sl.base)return;e.preventDefault();const p=evp(e),f=Math.exp(-e.deltaY*0.0015),s=clamp(sl.vw.s*f,0.02,40);
+  const ip=s2i(sl,p);sl.vw={s,tx:p.x-ip.x*s,ty:p.y-ip.y*s};render()},{passive:false});
+
+/* ---------- history ---------- */
+function pushHist(slot,keys){const sl=S[slot];hist.push({slot,items:keys.map(k=>({k,prev:sl.pts[k]?sl.pts[k].map(q=>q&&{...q}):undefined}))});if(hist.length>200)hist.shift()}
+function undo(){const h=hist.pop();if(!h){toast('元に戻す操作はありません');return}const sl=S[h.slot];
+  h.items.forEach(it=>{if(it.prev===undefined)delete sl.pts[it.k];else sl.pts[it.k]=it.prev});
+  if(h.slot!==st.slot){setSlot(h.slot)}save();renderAll()}
+
+/* ---------- measuring ---------- */
+function buildQueue(sl,q){const seen=new Set(),out=[];for(const id of q.params){const p=id==='_cal'?{lm:['_cal']}:PID[id];
+  for(const k of p.lm){if(seen.has(k))continue;seen.add(k);if(q.skip.has(k))continue;if(id!=='_cal'&&getPts(sl,k))continue;
+    const r=sl.pts[k]||[];LM[k].subs.forEach((_,i)=>{if(!r[i])out.push({k,i})})}}return out}
+function curItem(){const sl=S[st.q.slot];return buildQueue(sl,st.q)[0]||null}
+function startMeasure(params,opt={}){const sl=cur();if(!sl.base){toast('先に画像を読み込んでください');return}
+  st.q={params,skip:new Set(),slot:st.slot,cal:!!opt.cal};
+  if(opt.cal){delete sl.pts._cal}
+  const n=buildQueue(sl,st.q).length;if(!n){st.q=null;toast('必要な点はすべて入力済みです');return}
+  st.q.total=n;st.mode='measure';setSheet('min');renderAll()}
+function place(ip){const sl=S[st.q.slot];const it=curItem();if(!it)return;pushHist(sl.id,[it.k]);
+  const a=sl.pts[it.k]?[...sl.pts[it.k]]:[];a[it.i]={x:ip.x,y:ip.y};sl.pts[it.k]=a;save();
+  if(!curItem())finishMeasure();else renderAll()}
+function finishMeasure(){const q=st.q;st.mode='idle';st.q=null;setSheet('mid');
+  if(q.cal){renderAll();openSettings(true);return}
+  if(q.params.length===1)st.sel=q.params[0];toast('入力が完了しました');renderAll()}
+function stopMeasure(){st.mode='idle';st.q=null;setSheet('mid');renderAll()}
+function skipItem(){const it=curItem();if(!it)return;const sl=S[st.q.slot];const d=LM[it.k];
+  if(d.type==='pair'&&it.i===1&&sl.pts[it.k]&&sl.pts[it.k][0]){pushHist(sl.id,[it.k]);sl.pts[it.k]=[sl.pts[it.k][0],{...sl.pts[it.k][0]}];save()}
+  else st.q.skip.add(it.k);
+  if(!curItem())finishMeasure();else renderAll()}
+function backItem(){const h=hist[hist.length-1];if(!h){return}undo();if(st.q){const it=curItem();if(!it)stopMeasure();else renderAll()}}
+function clearParamPts(p){const sl=cur();const ks=p.lm.filter(k=>sl.pts[k]);if(!ks.length)return;pushHist(sl.id,ks);ks.forEach(k=>delete sl.pts[k]);save()}
+
+/* ================= UI ================= */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(t){const el=$('toast');el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2200)}
+function setSheet(m){st.sheet=m;$('sheet').className=m}
+$('grip').onclick=()=>setSheet(st.sheet==='min'?'mid':st.sheet==='mid'?'max':'min');
+function setSlot(id){st.slot=id;const v=slotView(id),rv=regView(st.region);
+  if(v==='c'&&rv==='s')st.region='co';if(v==='s'&&rv==='c')st.region='lx';
+  const sl=cur();if(sl.base&&!sl.vw)fit(sl);renderAll()}
+function setRegion(id){const rv=regView(id),v=slotView(st.slot);st.region=id;
+  if(rv==='c'&&v!=='c')st.slot='ap';if(rv==='s'&&v==='c')st.slot='lat';
+  const sl=cur();if(sl.base&&!sl.vw)fit(sl);renderAll()}
+function renderAll(){renderUI();render()}
+function renderUI(){renderTop();renderRegions();renderPrompt();renderBody()}
+function renderTop(){
+  const pp=patientOf(st.sid),sd_=DBI.studies.find(x=>x.id===st.sid);
+  $('ctxP').textContent=pp?(pp.code||'ID未入力')+(pp.name?'  '+pp.name:''):'患者を選択';
+  $('ctxS').textContent=sd_?sd_.label+(sd_.date?' · '+sd_.date:''):'患者・測定日を登録して記録';
+  $('slots').innerHTML=SLOTS.map(s=>`<button data-s="${s.id}" aria-pressed="${s.id===st.slot}">${s.name}${S[s.id].base?'<i></i>':''}</button>`).join('');
+  const sl=cur(),v=slotView(st.slot);
+  if(v==='c'){$('bFace').textContent=st.apStd?'画像の左＝患者の右':'画像の左＝患者の左'}
+  else{const f=facing(sl);$('bFace').textContent='前方 '+(f>0?'→':'←')+'（'+(sl.facing==='auto'?'自動':'固定')+'）'}
+  const b=$('bCal');if(sl.mmpp){b.textContent='較正 '+sl.mmpp.toFixed(3)+' mm/px';b.className='chip'}else{b.textContent='未較正';b.className='chip warn'}
+}
+function renderRegions(){const sl=cur();
+  $('regions').innerHTML=REG.map(r=>{let c='';if(r.id!=='dyn'){const ps=P.filter(p=>p.r===r.id);const tgt=r.v==='c'?S.ap:r.v==='s'&&slotView(st.slot)==='c'?S.lat:sl;
+      const n=ps.filter(p=>compute(p,tgt)).length;c=`<small>${n}/${ps.length}</small>`}
+    return`<button data-r="${r.id}" aria-pressed="${r.id===st.region}">${r.n}${c}</button>`}).join('')+'<button class="tr" data-tr="1">推移を見る</button>'}
+function renderPrompt(){const el=$('prompt');if(st.mode!=='measure'||!st.q){el.hidden=true;return}const it=curItem();if(!it){el.hidden=true;return}
+  const sl=S[st.q.slot],rem=buildQueue(sl,st.q).length,d=LM[it.k];el.hidden=false;
+  $('pStep').textContent=(st.q.total-rem+1)+' / '+st.q.total;$('pName').textContent=d.name;$('pSub').textContent=d.subs[it.i]||'';
+  $('pHint').textContent=(d.hint?d.hint+'。':'')+'指でなぞると拡大鏡が出ます。離した位置に点を置きます。2本指で拡大・移動。';
+  $('pSkip').textContent=d.type==='pair'&&it.i===1?'片側のみ':'スキップ'}
+function rowHTML(p,r,sl,need){const sel=p.id===st.sel;
+  const right=r?`<span class="dot ${r.s||''}"></span>${esc(fmtV(r))}<small>${esc(r.u==='点'?'点':unitTxt(r))}</small>`:`<span class="todo">${need} 点で測定</span>`;
+  return`<button class="row" data-p="${p.id}" aria-current="${sel}"><span class="nm">${esc(p.n)}<small>${esc(r&&r.st?r.st:p.en)}</small></span><span class="val">${right}</span></button>`}
+function renderBody(){const b=$('sbody'),reg=REG.find(r=>r.id===st.region);
+  if(st.region==='dyn'){b.innerHTML=dynHTML();return}
+  const sl=cur(),ps=P.filter(p=>p.r===st.region);let h='';
+  const p=selParam();
+  if(p){const r=compute(p,sl),need=missing(p,sl);
+    h+=`<div class="det"><div class="dt"><div><h3>${esc(p.n)}</h3><div class="en">${esc(p.en)}</div></div>${r?`<div class="big">${esc(fmtV(r))}<small>${esc(r.u==='点'?'点':unitTxt(r))}</small></div>`:''}</div>
+    ${r?`<div class="fl">${r.s?`<span class="pill ${r.s}">${esc(r.st||STX[r.s])}</span>`:r.st?`<span class="pill na">${esc(r.st)}</span>`:''}${r.t?`<span class="note">${esc(r.t)}</span>`:''}</div>`:`<p class="note">あと ${need} 点の入力で計算します。</p>`}
+    <p>${esc(p.ref)}</p>
+    <div class="acts">${r?`<button class="btn sm" data-a="zoom">この部位を拡大</button><button class="btn sm" data-a="redo">点を消して再測定</button>`:`<button class="btn sm pri" data-a="meas">測定を始める</button>`}<button class="btn sm ghost" data-a="close">閉じる</button></div></div>`}
+  const lab=reg.v==='c'?'正面像':reg.v==='f'?'任意':'側面像';
+  h+=`<div class="rhead"><span>${esc(reg.d)} · ${esc(SLOTS.find(s=>s.id===st.slot).name)}スロットで計算</span><button class="btn sm" data-a="all">まとめて測定</button></div>`;
+  if(!sl.base)h+=`<p class="small">このスロットには画像がありません。上の「画像」から読み込んでください。</p>`;
+  h+='<div class="list">'+ps.map(p=>rowHTML(p,compute(p,sl),sl,missing(p,sl))).join('')+'</div>';
+  if(!sl.mmpp&&sl.base)h+=`<p class="small">距離（mm）は較正後に表示されます。DICOM は自動、写真は定規や既知の長さで較正してください。</p>`;
+  b.innerHTML=h}
+function dynHTML(){const F=S.flex,E=S.ext;let h=`<div class="rhead"><span>前屈・後屈スロットで同じ項目を測ると差（ROM・移動量）を表示します</span></div>`;
+  h+='<div class="tblwrap"><div class="dyn"><div class="h">項目</div><div class="h n">前屈</div><div class="h n">後屈</div><div class="h n">差</div>';
+  DYN.forEach(o=>{const p=PID[o.b],a=compute(p,F),b=compute(p,E);let df='—',cls='';
+    const show=r=>r?esc(fmtV(r))+(r.u==='%'?'%':r.u==='°'?'°':' '+unitTxt(r)):'—';
+    let fa=show(a),fb=show(b);
+    if(o.k==='s'){const m=r=>r?(r.x.mm!=null?f1(r.x.mm)+' mm':f1(r.x.px)+' px'):'—';fa=m(a);fb=m(b);
+      if(a&&b){const dm=a.x.mm!=null&&b.x.mm!=null?Math.abs(a.x.mm-b.x.mm):null;df=dm!=null?f1(dm)+' mm':f1(Math.abs(a.x.px-b.x.px))+' px';if(dm!=null)cls=dm>=4?'bad':dm>=3?'warn':'ok'}}
+    else if(a&&b&&typeof a.v==='number'){const d=Math.abs(b.v-a.v);df=f1(d)+(a.u==='°'?'°':' '+unitTxt(a));if(o.k==='a'&&/disc/.test(o.b))cls=d>=15?'bad':d>=10?'warn':'ok'}
+    if(o.k==='adi'&&a&&a.u==='mm')cls=a.v>3?'bad':'ok';
+    h+=`<div>${esc(p.n.replace(/・椎間板高/,''))}</div><div class="n">${fa}</div><div class="n">${fb}</div><div class="n">${cls?`<span class="dot ${cls}" style="display:inline-block;margin-right:6px"></span>`:''}${df}</div>`});
+  h+='</div></div><p class="small">目安：腰椎の椎間移動量 3–4 mm 以上・椎間角変化 10–15° 以上で不安定性。ADI は前屈位で 3 mm 超を異常とします。各項目は各スロットの該当部位タブで測定します。</p>';
+  h+=`<div class="acts" style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-s2="flex">前屈スロットを開く</button><button class="btn sm" data-s2="ext">後屈スロットを開く</button></div>`;
+  return h}
+
+/* events */
+$('slots').addEventListener('click',e=>{const b=e.target.closest('button[data-s]');if(b){if(st.mode==='measure')stopMeasure();setSlot(b.dataset.s)}});
+$('regions').addEventListener('click',e=>{if(e.target.closest('[data-tr]')){openTrend();return}const b=e.target.closest('button[data-r]');if(b){if(st.mode==='measure')stopMeasure();setRegion(b.dataset.r);if(st.sheet==='min')setSheet('mid')}});
+$('sbody').addEventListener('click',e=>{const t=e.target.closest('[data-p],[data-a],[data-s2]');if(!t)return;
+  if(t.dataset.s2){setSlot(t.dataset.s2);if(st.region==='dyn')setRegion('cx');return}
+  if(t.dataset.p){const p=PID[t.dataset.p],sl=cur();st.sel=p.id;if(!compute(p,sl)&&sl.base){startMeasure([p.id])}else renderAll();return}
+  const a=t.dataset.a,p=selParam();
+  if(a==='close'){st.sel=null;renderAll()}
+  else if(a==='meas'&&p)startMeasure([p.id]);
+  else if(a==='redo'&&p){clearParamPts(p);startMeasure([p.id])}
+  else if(a==='zoom'&&p){const sl=cur();const pts=p.lm.flatMap(k=>getPts(sl,k)||[]);if(pts.length){const xs=pts.map(q=>q.x),ys=pts.map(q=>q.y);
+      const pad=Math.max(40,(Math.max(...xs)-Math.min(...xs)+Math.max(...ys)-Math.min(...ys))*0.2);
+      fit(sl,{x0:Math.min(...xs)-pad,y0:Math.min(...ys)-pad,x1:Math.max(...xs)+pad,y1:Math.max(...ys)+pad});render()}}
+  else if(a==='all'){startMeasure(P.filter(q=>q.r===st.region).map(q=>q.id))}});
+$('pSkip').onclick=skipItem;$('pStop').onclick=stopMeasure;$('pBack').onclick=backItem;
+$('bUndo').onclick=undo;
+$('bFit').onclick=()=>{const sl=cur();fit(sl);render()};
+$('bFace').onclick=()=>{const sl=cur();if(slotView(st.slot)==='c'){st.apStd=!st.apStd}else{const f=facing(sl);sl.facing=sl.facing==='auto'?(f>0?'L':'R'):sl.facing==='R'?'L':'auto'}save();renderAll()};
+$('bCal').onclick=()=>openSettings(false);
+$('bSet').onclick=()=>openSettings(false);
+$('bRep').onclick=openReport;
+$('bCtx').onclick=()=>openPatients(st.pid?'patient':'list',st.pid);
+$('file').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{await loadFile(f)}catch(err){toast(err.message||'読み込みに失敗しました')}});
+
+/* ================= modal: settings / report ================= */
+function openModal(html){$('mc').innerHTML=html;$('modal').hidden=false}
+function closeModal(){$('modal').hidden=true}
+$('modal').addEventListener('click',e=>{if(e.target.id==='modal'||e.target.closest('[data-x]'))closeModal()});
+function openSettings(calFocus){const sl=cur(),v=slotView(st.slot),c=sl.pts._cal&&complete('_cal',sl.pts._cal)?dist(sl.pts._cal[0],sl.pts._cal[1]):null;
+  openModal(`<div class="mh"><h2>設定 · ${esc(SLOTS.find(s=>s.id===st.slot).name)}スロット</h2><button class="btn sm ghost" data-x>閉じる</button></div>
+  <div class="fs"><span class="lab">較正（mm / px）</span>
+    <p class="small">現在：${sl.mmpp?sl.mmpp.toFixed(4)+' mm/px'+(sl.calSrc?'（'+esc(sl.calSrc)+'）':''):'未較正'}</p>
+    <div class="fl"><button class="btn sm pri" id="sCalLine">既知の長さで較正線を引く</button></div>
+    ${c?`<div class="fl"><span class="small">較正線 ${c.toFixed(1)} px ＝</span><input type="number" id="sCalMm" inputmode="decimal" placeholder="長さ mm" step="0.1"><button class="btn sm" id="sCalApply">適用</button></div>`:''}
+    <div class="fl"><span class="small">直接入力</span><input type="number" id="sMmpp" inputmode="decimal" step="0.001" placeholder="mm/px" value="${sl.mmpp?sl.mmpp.toFixed(4):''}"><button class="btn sm" id="sMmppApply">適用</button><button class="btn sm ghost" id="sMmppClear">解除</button></div>
+    <p class="small">DICOM は PixelSpacing から自動設定します。X 線の拡大率（約 1.1–1.2 倍）を補正したい場合は較正球や既知のインプラント長で較正してください。</p></div>
+  ${v==='s'?`<div class="fs"><span class="lab">側面像の前方向</span><div class="seg" id="sFace">${['auto','R','L'].map(k=>`<button data-f="${k}" aria-pressed="${sl.facing===k}">${{auto:'自動',R:'右が前',L:'左が前'}[k]}</button>`).join('')}</div>
+    <p class="small">自動：終板を「前縁 → 後縁」の順に入力した向きなどから判定します。角度の符号（前弯・後弯、PT など）に影響します。</p></div>`:
+   `<div class="fs"><span class="lab">正面像の左右</span><div class="seg" id="sAp"><button data-ap="1" aria-pressed="${st.apStd}">画像の左＝患者の右</button><button data-ap="0" aria-pressed="${!st.apStd}">画像の左＝患者の左</button></div></div>`}
+  <div class="fs"><label for="sAge">既定の年齢（GAP スコア用。患者情報に年齢・生年月日があればそちらを使用）</label><div class="fl"><input type="number" id="sAge" inputmode="numeric" value="${esc(st.age)}" placeholder="歳"></div></div>
+  <div class="fs"><span class="lab">画像の見え方</span>
+    <div class="fl"><span class="small" style="width:72px">明るさ</span><input type="range" id="sB" min="-100" max="100" step="5" value="${st.adj.b}"><span class="v" id="sBv">${st.adj.b}</span></div>
+    <div class="fl"><span class="small" style="width:72px">コントラスト</span><input type="range" id="sC" min="0.5" max="3" step="0.1" value="${st.adj.c}"><span class="v" id="sCv">${st.adj.c.toFixed(1)}</span></div>
+    <div class="fl"><label class="small"><input type="checkbox" id="sInv" ${st.adj.inv?'checked':''}> 白黒反転</label><label class="small"><input type="checkbox" id="sLab" ${st.labels?'checked':''}> すべての点に名前を表示</label></div></div>
+  <div class="fs"><span class="lab">データ</span>
+    <p class="small">患者・画像・点は、この端末のブラウザ内にだけ保存されます。バックアップは「患者・測定日」画面から保存できます。</p>
+    <div class="fl"><button class="btn sm danger" id="sClr" data-step="0">このスロットの点を消去</button><button class="btn sm" id="sDemo">デモ症例を作り直す</button><button class="btn sm danger" id="sAll" data-step="0">全患者データを消去</button></div></div>`);
+  $('sCalLine').onclick=()=>{closeModal();startMeasure(['_cal'],{cal:true})};
+  if($('sCalApply')){$('sCalApply').onclick=()=>{const mm=parseFloat($('sCalMm').value);if(!(mm>0)){toast('長さ（mm）を入力してください');return}sl.mmpp=mm/c;sl.calSrc='較正線 '+mm+' mm';save();renderAll();openSettings(false);toast('較正しました')};if(calFocus)setTimeout(()=>$('sCalMm').focus(),50)}
+  $('sMmppApply').onclick=()=>{const v=parseFloat($('sMmpp').value);if(!(v>0)){toast('数値を入力してください');return}sl.mmpp=v;sl.calSrc='直接入力';save();renderAll();openSettings(false)};
+  $('sMmppClear').onclick=()=>{sl.mmpp=null;sl.calSrc='';save();renderAll();openSettings(false)};
+  if($('sFace'))$('sFace').onclick=e=>{const b=e.target.closest('[data-f]');if(!b)return;sl.facing=b.dataset.f;save();renderAll();openSettings(false)};
+  if($('sAp'))$('sAp').onclick=e=>{const b=e.target.closest('[data-ap]');if(!b)return;st.apStd=b.dataset.ap==='1';save();renderAll();openSettings(false)};
+  $('sAge').oninput=e=>{st.age=e.target.value;save();renderUI()};
+  const adj=()=>{st.adj={b:+$('sB').value,c:+$('sC').value,inv:$('sInv').checked};$('sBv').textContent=st.adj.b;$('sCv').textContent=st.adj.c.toFixed(1);render()};
+  $('sB').oninput=adj;$('sC').oninput=adj;$('sInv').onchange=adj;
+  $('sLab').onchange=e=>{st.labels=e.target.checked;render()};
+  const two=(el,fn)=>{el.onclick=()=>{if(el.dataset.step==='0'){el.dataset.step='1';el.textContent='もう一度押すと消去します';setTimeout(()=>{if(el.isConnected){el.dataset.step='0';el.textContent=el.id==='sAll'?'全患者データを消去':'このスロットの点を消去'}},3000);return}fn()}};
+  two($('sClr'),()=>{pushHist(sl.id,Object.keys(sl.pts));sl.pts={};save();renderAll();closeModal();toast('点を消去しました（元に戻せます）')});
+  $('sDemo').onclick=async()=>{createDemo();closeModal();await openStudy('demo-pre');toast('デモ症例を作り直しました')};
+  two($('sAll'),async()=>{st.sid=null;await idbClear();DBI={patients:[],studies:[]};for(const k in REC)delete REC[k];createDemo();closeModal();await openStudy('demo-pre',{noSave:true});toast('すべて消去しました')});
+}
+function reportData(){const rows=[];
+  SLOTS.forEach(s=>{const sl=S[s.id];if(!sl.base)return;
+    REG.forEach(r=>{if(r.id==='dyn')return;if(r.v==='c'&&s.view!=='c')return;if(r.v==='s'&&s.view==='c')return;
+      P.filter(p=>p.r===r.id).forEach(p=>{const v=compute(p,sl);if(v)rows.push({slot:s.name,reg:r.n,p,v})})})});return rows}
+function openReport(){const rows=reportData(),today=new Date().toISOString().slice(0,10);
+  const ps=patientOf(st.sid),sd_=DBI.studies.find(x=>x.id===st.sid);
+  let t='脊椎アライメント計測  '+today+'\n';if(ps)t+='患者 '+ps.code+(ps.name?'（'+ps.name+'）':'')+(ps.dx?' / '+ps.dx:'')+'\n';if(sd_)t+='時点 '+sd_.label+(sd_.date?'  '+sd_.date:'')+'\n';let ls='',lr='';
+  rows.forEach(o=>{if(o.slot!==ls){ls=o.slot;lr='';const sl=Object.values(S).find(x=>SLOTS.find(s=>s.id===x.id).name===o.slot);
+      t+='\n■ '+o.slot+'像'+(sl.mmpp?'  較正 '+sl.mmpp.toFixed(4)+' mm/px':'  未較正')+'\n'}
+    if(o.reg!==lr){lr=o.reg;t+='【'+o.reg+'】\n'}
+    t+='  '+o.p.n+': '+fmtV(o.v)+(o.v.u==='px'?' px':o.v.u)+(o.v.st?' ['+o.v.st+']':o.v.s?' ['+STX[o.v.s]+']':'')+(o.v.t?'  '+o.v.t:'')+'\n'});
+  if(!rows.length)t+='\n計測値はまだありません。\n';
+  t+='\n※ 研究・教育用の計測補助です。診断は画像と臨床所見に基づき医師が行ってください。';
+  const csv='slot,region,parameter,value,unit,status,note\n'+rows.map(o=>[o.slot,o.reg,o.p.n,fmtV(o.v),o.v.u,o.v.st||(o.v.s?STX[o.v.s]:''),o.v.t].map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n');
+  openModal(`<div class="mh"><h2>計測レポート</h2><button class="btn sm ghost" data-x>閉じる</button></div>
+   <p class="small">${rows.length} 項目。電子カルテや研究用データベースに貼り付けて使えます。</p>
+   <div class="fl"><button class="btn sm" id="rTr">この患者の推移を見る</button></div>
+   <textarea id="rTxt" readonly>${esc(t)}</textarea>
+   <div class="fl"><button class="btn sm pri" id="rCopy">テキストをコピー</button><button class="btn sm" id="rCsv">CSV をコピー</button></div>`);
+  const cp=(txt)=>{const ta=$('rTxt');try{navigator.clipboard.writeText(txt).then(()=>toast('コピーしました'),()=>{ta.value=txt;ta.focus();ta.select();toast('選択しました。長押しでコピーしてください')})}catch(e){ta.value=txt;ta.focus();ta.select()}};
+  $('rCopy').onclick=()=>cp(t);$('rTr').onclick=()=>openTrend();$('rCsv').onclick=()=>cp(csv)}
+
+/* ================= image loading ================= */
+const MAXD=3200;
+function loadImg(blob){return new Promise((res,rej)=>{const u=URL.createObjectURL(blob),im=new Image();im.onload=()=>{res(im);setTimeout(()=>URL.revokeObjectURL(u),1000)};im.onerror=()=>rej(new Error('画像を読み込めませんでした（対応形式：JPEG / PNG / 非圧縮 DICOM）'));im.src=u})}
+function toCanvas(src,w,h){let f=Math.min(1,MAXD/Math.max(w,h));const c=document.createElement('canvas');c.width=Math.round(w*f);c.height=Math.round(h*f);
+  const x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(src,0,0,c.width,c.height);return{c,f}}
+async function loadFile(file){const buf=await file.arrayBuffer(),u8=new Uint8Array(buf);let canvas,mmpp=null,src='';
+  const isD=(u8.length>132&&u8[128]===68&&u8[129]===73&&u8[130]===67&&u8[131]===77)||/\.dcm$/i.test(file.name);
+  if(isD){const r=parseDicom(buf);const t=toCanvas(r.canvas,r.canvas.width,r.canvas.height);canvas=t.c;if(r.ps){mmpp=r.ps/t.f;src=r.psSrc}}
+  else{const im=await loadImg(file);const t=toCanvas(im,im.naturalWidth,im.naturalHeight);canvas=t.c}
+  if(!st.sid)await quickStudy();
+  const sl=cur();pushHist(sl.id,Object.keys(sl.pts));
+  Object.assign(sl,{base:canvas,view:null,adjKey:'',pts:{},mmpp,calSrc:src,demo:false,vw:null,fname:file.name,facing:'auto'});fit(sl);
+  saveImg(sl.id);save();renderAll();toast(mmpp?'DICOM を読み込みました（自動較正）':'画像を読み込みました')}
+function parseDicom(buf){const dv=new DataView(buf),n=buf.byteLength,el={};
+  const LONG=new Set(['OB','OW','OF','SQ','UT','UN','UC','UR','OD','OL','OV','SV','UV']);
+  const str=(o,l)=>{let s='';for(let i=0;i<l;i++){const c=dv.getUint8(o+i);if(c)s+=String.fromCharCode(c)}return s.trim()};
+  function readEl(o,expl,top){const g=dv.getUint16(o,true),e=dv.getUint16(o+2,true);o+=4;let vr='',L;
+    if(expl&&g!==0xFFFE){vr=String.fromCharCode(dv.getUint8(o),dv.getUint8(o+1));if(LONG.has(vr)){L=dv.getUint32(o+4,true);o+=8}else{L=dv.getUint16(o+2,true);o+=4}}
+    else{L=dv.getUint32(o,true);o+=4}
+    const tag=((g<<16)|e)>>>0;
+    if(L===0xFFFFFFFF){if(tag===0x7FE00010)throw new Error('圧縮 DICOM には未対応です。非圧縮で書き出すか、JPEG / PNG で読み込んでください');return skipSeq(o,expl)}
+    if(top)el[tag]={o,L,vr};return o+L}
+  function skipSeq(o,expl){while(o+8<=n){const g=dv.getUint16(o,true),e=dv.getUint16(o+2,true),L=dv.getUint32(o+4,true);o+=8;
+      if(g===0xFFFE&&e===0xE0DD)return o;if(g===0xFFFE&&e===0xE000){if(L===0xFFFFFFFF){while(o+8<=n){if(dv.getUint16(o,true)===0xFFFE&&dv.getUint16(o+2,true)===0xE00D){o+=8;break}o=readEl(o,expl,false)}}else o+=L;continue}return o}return o}
+  let o=0,ts='1.2.840.10008.1.2';
+  if(n>132&&str(128,4)==='DICM'){o=132;while(o+8<=n&&dv.getUint16(o,true)===2)o=readEl(o,true,true);if(el[0x00020010])ts=str(el[0x00020010].o,el[0x00020010].L)}
+  if(ts!=='1.2.840.10008.1.2'&&ts!=='1.2.840.10008.1.2.1')throw new Error('この DICOM 形式（'+ts+'）は未対応です。非圧縮で書き出すか JPEG / PNG をご利用ください');
+  const expl=ts!=='1.2.840.10008.1.2';
+  while(o+8<=n){o=readEl(o,expl,true);if(el[0x7FE00010])break}
+  const us=t=>el[t]?dv.getUint16(el[t].o,true):null,ds=t=>el[t]?str(el[t].o,el[t].L).split('\\').map(parseFloat):null,ss=t=>el[t]?str(el[t].o,el[t].L):'';
+  const rows=us(0x00280010),cols=us(0x00280011),bits=us(0x00280100)||16,prep=us(0x00280103)||0,spp=us(0x00280002)||1,photo=ss(0x00280004);
+  const px=el[0x7FE00010];if(!px||!rows||!cols)throw new Error('DICOM に画像データが見つかりません');
+  const slope=(ds(0x00281053)||[1])[0],icpt=(ds(0x00281052)||[0])[0];let wc=ds(0x00281050),ww=ds(0x00281051);
+  const c=document.createElement('canvas');c.width=cols;c.height=rows;const x=c.getContext('2d'),id=x.createImageData(cols,rows),d=id.data,N=rows*cols;
+  if(spp===3){for(let i=0;i<N;i++){d[i*4]=dv.getUint8(px.o+i*3);d[i*4+1]=dv.getUint8(px.o+i*3+1);d[i*4+2]=dv.getUint8(px.o+i*3+2);d[i*4+3]=255}}
+  else{const vals=new Float32Array(N);let mn=Infinity,mx=-Infinity;
+    for(let i=0;i<N;i++){let v=bits===8?dv.getUint8(px.o+i):(prep?dv.getInt16(px.o+i*2,true):dv.getUint16(px.o+i*2,true));v=v*slope+icpt;vals[i]=v;if(v<mn)mn=v;if(v>mx)mx=v}
+    let lo,hi;if(wc&&ww&&ww[0]>0){lo=wc[0]-ww[0]/2;hi=wc[0]+ww[0]/2}else{lo=mn;hi=mx}const sc=255/((hi-lo)||1),inv=photo==='MONOCHROME1';
+    for(let i=0;i<N;i++){let v=(vals[i]-lo)*sc;v=v<0?0:v>255?255:v;if(inv)v=255-v;d[i*4]=d[i*4+1]=d[i*4+2]=v;d[i*4+3]=255}}
+  x.putImageData(id,0,0);
+  let ps=ds(0x00280030),psSrc='PixelSpacing';if(!ps||!(ps[0]>0)){ps=ds(0x00181164);psSrc='ImagerPixelSpacing（拡大率未補正）'}
+  return{canvas:c,ps:ps&&ps[0]>0?((ps[0]+(ps[1]||ps[0]))/2):null,psSrc}}
+
+/* ================= persistence ================= */
+let dbp=null;
+function db(){if(!dbp)dbp=new Promise((res,rej)=>{try{const r=indexedDB.open('spine-align',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}});return dbp}
+async function idbSet(k,v){try{const d=await db();await new Promise((res,rej)=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)})}catch(e){}}
+async function idbGet(k){try{const d=await db();return await new Promise((res,rej)=>{const t=d.transaction('kv','readonly'),r=t.objectStore('kv').get(k);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}catch(e){return undefined}}
+async function idbClear(){try{const d=await db();await new Promise(res=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').clear();t.oncomplete=res;t.onerror=res})}catch(e){}}
+let saveT=null;function save(){clearTimeout(saveT);saveT=setTimeout(saveNow,400)}
+function saveNow(){clearTimeout(saveT);if(!st.sid)return;const rec={apStd:st.apStd,slots:{}};
+  SLOTS.forEach(s=>{const sl=S[s.id];rec.slots[s.id]={pts:sl.pts,mmpp:sl.mmpp,calSrc:sl.calSrc,facing:sl.facing,demo:sl.demo||false,has:!!sl.base,fname:sl.fname}});
+  REC[st.sid]=JSON.parse(JSON.stringify(rec));idbSet('study:'+st.sid,REC[st.sid]);saveUI()}
+function saveUI(){idbSet('ui',{pid:st.pid,sid:st.sid,age:st.age})}
+function saveIndex(){idbSet('index',DBI)}
+function saveImg(id){const sl=S[id],sid=st.sid;if(!sid)return;if(!sl.base||sl.demo){idbDel('img:'+sid+':'+id);return}
+  try{sl.base.toBlob(b=>{if(b)idbSet('img:'+sid+':'+id,b)},'image/jpeg',0.93)}catch(e){}}
+async function idbDel(k){try{const d=await db();await new Promise(res=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=res;t.onerror=res})}catch(e){}}
+const newId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const byDate=(a,b)=>(a.date||'9999').localeCompare(b.date||'9999')||(a.created||0)-(b.created||0);
+function patientOf(sid){const s=DBI.studies.find(x=>x.id===sid);return s?DBI.patients.find(p=>p.id===s.pid):null}
+function ageFor(sid){const s=DBI.studies.find(x=>x.id===sid),p=s&&DBI.patients.find(x=>x.id===s.pid);
+  if(p){if(p.dob&&s.date){const a=new Date(p.dob),b=new Date(s.date);let y=b.getFullYear()-a.getFullYear();if(b.getMonth()<a.getMonth()||(b.getMonth()===a.getMonth()&&b.getDate()<a.getDate()))y--;if(y>=0&&y<130)return y}
+    if(p.age!==''&&p.age!=null&&!isNaN(+p.age))return +p.age}
+  return st.age===''||isNaN(+st.age)?null:+st.age}
+function resetSlot(sl){Object.assign(sl,{base:null,view:null,pts:{},mmpp:null,calSrc:'',facing:'auto',demo:false,vw:null,fname:'',adjKey:''})}
+const DEMOC={};
+function demoFor(v,slot){const k=v+':'+slot;if(!DEMOC[k]){const o=DEMO_V[v];if(!o)return null;DEMOC[k]=slot==='ap'?buildDemoCor(o.cor):slot==='lat'?buildDemoSag(o.sag):null}return DEMOC[k]}
+async function openStudy(sid,opt={}){if(st.mode==='measure')stopMeasure();if(st.sid&&!opt.noSave)saveNow();
+  const e=DBI.studies.find(x=>x.id===sid);if(!e)return;SLOTS.forEach(s=>resetSlot(S[s.id]));st.sid=sid;st.pid=e.pid;hist.length=0;
+  let rec=REC[sid];if(!rec){rec=await idbGet('study:'+sid)||{slots:{}};REC[sid]=rec}if(rec.apStd!=null)st.apStd=rec.apStd;
+  for(const s of SLOTS){const m=rec.slots&&rec.slots[s.id];if(!m)continue;const sl=S[s.id];
+    if(m.demo){const d=demoFor(m.demo,s.id);if(d){sl.base=d.canvas;sl.demo=m.demo}}
+    else if(m.has){const b=await idbGet('img:'+sid+':'+s.id);if(b){try{const im=await loadImg(b);sl.base=toCanvas(im,im.naturalWidth,im.naturalHeight).c}catch(err){}}}
+    sl.pts=JSON.parse(JSON.stringify(m.pts||{}));sl.mmpp=m.mmpp||null;sl.calSrc=m.calSrc||'';sl.facing=m.facing||'auto';sl.fname=m.fname||''}
+  if(st.sid!==sid)return;
+  if(!S[st.slot].base){const f=SLOTS.find(s=>S[s.id].base);st.slot=f?f.id:'lat'}
+  saveUI();setSlot(st.slot)}
+function addStudy(pid,label,date){const id=newId();DBI.studies.push({id,pid,label:label||'測定',date:date||today(),memo:'',created:Date.now()});REC[id]={apStd:st.apStd,slots:{}};idbSet('study:'+id,REC[id]);saveIndex();return id}
+function addPatient(o){const id=newId();DBI.patients.push(Object.assign({id,code:'',name:'',dob:'',age:'',sex:'',dx:'',op:'',memo:'',created:Date.now()},o));saveIndex();return id}
+async function quickStudy(){const pid=addPatient({code:'未登録 '+today()});const sid=addStudy(pid,'測定1',today());await openStudy(sid,{noSave:true});toast('新しい患者を仮登録しました。「患者・測定日」で情報を入力できます')}
+async function deleteStudy(sid){const wasCur=sid===st.sid;DBI.studies=DBI.studies.filter(x=>x.id!==sid);delete REC[sid];saveIndex();idbDel('study:'+sid);SLOTS.forEach(s=>idbDel('img:'+sid+':'+s.id));
+  if(wasCur){st.sid=null;const next=DBI.studies.filter(x=>x.pid===st.pid).sort(byDate).pop()||DBI.studies[0];if(next)await openStudy(next.id,{noSave:true});else{SLOTS.forEach(s=>resetSlot(S[s.id]));saveUI();renderAll()}}}
+async function deletePatient(pid){const ids=DBI.studies.filter(x=>x.pid===pid).map(x=>x.id);const cur_=ids.includes(st.sid);
+  DBI.patients=DBI.patients.filter(p=>p.id!==pid);DBI.studies=DBI.studies.filter(x=>x.pid!==pid);saveIndex();
+  ids.forEach(id=>{delete REC[id];idbDel('study:'+id);SLOTS.forEach(s=>idbDel('img:'+id+':'+s.id))});
+  if(cur_){st.sid=null;st.pid=null;const n=DBI.studies[0];if(n)await openStudy(n.id,{noSave:true});else{SLOTS.forEach(s=>resetSlot(S[s.id]));saveUI();renderAll()}}}
+function createDemo(){DBI.patients=DBI.patients.filter(p=>p.id!=='demo');DBI.studies=DBI.studies.filter(s=>s.pid!=='demo');
+  DBI.patients.unshift({id:'demo',code:'DEMO-001',name:'デモ症例',dob:'',age:'68',sex:'女性',dx:'成人脊柱変形（デモ）',op:'T10–腸骨 後方矯正固定術',memo:'シェーマによる架空の症例です',created:1,demo:true});
+  [['demo-pre','術前','2026-03-12','pre'],['demo-post','術後3か月','2026-07-02','post']].forEach(([id,label,date,v],i)=>{
+    DBI.studies.push({id,pid:'demo',label,date,memo:'',created:2+i});const a=demoFor(v,'lat'),b=demoFor(v,'ap');
+    REC[id]={apStd:true,slots:{lat:{pts:JSON.parse(JSON.stringify(a.pts)),mmpp:a.mmpp,calSrc:'デモ',facing:'auto',demo:v,has:true},ap:{pts:JSON.parse(JSON.stringify(b.pts)),mmpp:b.mmpp,calSrc:'デモ',facing:'auto',demo:v,has:true}}};
+    idbSet('study:'+id,REC[id])});saveIndex()}
+async function migrateV1(){const meta=await idbGet('meta');if(!meta||!meta.slots)return;const real=SLOTS.filter(s=>meta.slots[s.id]&&meta.slots[s.id].has&&!meta.slots[s.id].demo);if(!real.length)return;
+  const pid=addPatient({code:'未分類',age:meta.age||'',memo:'以前のバージョンから引き継いだ画像'});const sid=addStudy(pid,'取り込み',today());const rec={apStd:meta.apStd!==false,slots:{}};
+  for(const s of real){rec.slots[s.id]=Object.assign({},meta.slots[s.id],{demo:false});const b=await idbGet('img:'+s.id);if(b)await idbSet('img:'+sid+':'+s.id,b)}
+  REC[sid]=rec;await idbSet('study:'+sid,rec)}
+/* slot-like objects for any saved study (values without loading images) */
+function recSlots(sid){if(sid===st.sid)return S;const rec=REC[sid]||{slots:{}},age=ageFor(sid),o={};
+  SLOTS.forEach(s=>{const m=(rec.slots||{})[s.id]||{};o[s.id]={id:s.id,pts:m.pts||{},mmpp:m.mmpp||null,facing:m.facing||'auto',has:!!(m.pts&&Object.keys(m.pts).length),apStd:rec.apStd!=null?rec.apStd:true,age}});return o}
+function studyValues(sid){const ss=recSlots(sid),out={};P.forEach(p=>{if(p.r==='free')return;const r=compute(p,regView(p.r)==='c'?ss.ap:ss.lat);if(r)out[p.id]=r});return out}
+
+/* ================= demo schematics ================= */
+const dr_=t=>({x:Math.cos(t*D2R),y:Math.sin(t*D2R)}),nr_=t=>({x:-Math.sin(t*D2R),y:Math.cos(t*D2R)});
+function addNoise(c,amt){const x=c.getContext('2d'),id=x.getImageData(0,0,c.width,c.height),d=id.data;let s=12345;
+  for(let i=0;i<d.length;i+=4){s=(s*16807)%2147483647;const n=((s/2147483647)-.5)*amt;d[i]+=n;d[i+1]+=n;d[i+2]+=n}x.putImageData(id,0,0)}
+const DEMO_V={pre:{sag:{},cor:{}},post:{sag:{ss:45,pt:10,da:{L5:16,L4:13,L3:10,L2:7,L1:4},fuse:true},cor:{a1:9,a2:6}}};
+function buildDemoSag(o={}){
+  const LV=['S1','L5','L4','L3','L2','L1','T12','T11','T10','T9','T8','T7','T6','T5','T4','T3','T2','T1','C7','C6','C5','C4','C3','C2'];
+  const dim=n=>{const t=n[0],k=+n.slice(1);if(t==='L')return{w:44,h:27,d:n==='L5'?11:10};if(t==='T')return{w:28+(k-1)*.75,h:17+(k-1)*.55,d:5};return{w:17,h:13.5,d:5}};
+  const DA=Object.assign({L5:14,L4:10,L3:8,L2:5,L1:3,T12:0,T1:-1,C7:1},o.da||{}),BA={L5:3,L4:2,L3:1,L2:0,L1:-1,C7:1,C2:0};
+  const ep=(c,t,w)=>({A:add(c,mul(dr_(t),w/2)),P:sub(c,mul(dr_(t),w/2)),c,t,w});
+  const V={};let c={x:0,y:0},t=-(o.ss||40);V.S1={sup:ep(c,t,46)};
+  for(let i=1;i<LV.length;i++){const nm=LV[i],d=dim(nm),da=DA[nm]??(nm[0]==='T'?-1.8:3),ba=BA[nm]??(nm[0]==='T'?-1.2:1);
+    c=add(c,mul(nr_(t+da/2),d.d));t+=da;const inf=ep(c,t,d.w);c=add(c,mul(nr_(t+ba/2),d.h));t+=ba;V[nm]={inf,sup:ep(c,t,d.w)}}
+  const F={};// frame points (mm): x anterior, y up
+  for(const nm in V){if(V[nm].sup)F[nm+'sup']=[V[nm].sup.A,V[nm].sup.P];if(V[nm].inf)F[nm+'inf']=[V[nm].inf.A,V[nm].inf.P];
+    if(V[nm].sup&&V[nm].inf){const a=V[nm].sup,b=V[nm].inf;F[nm+'c']=[{x:(a.A.x+a.P.x+b.A.x+b.P.x)/4,y:(a.A.y+a.P.y+b.A.y+b.P.y)/4}]}}
+  const c2=V.C2.inf,d2=dr_(c2.t),n2=nr_(c2.t),at=(a,b)=>add(add(c2.c,mul(d2,a)),mul(n2,b));
+  const X={DensTip:at(-1,36),DensA:at(6,26),DensP:at(-5,26),C1aP:at(8.5,26),C1A:at(13,27),C1pA:at(-23,25),C1P:at(-28,25),Basion:at(0,41),Opis:at(-35,36),
+    PNS:at(42,42),OccLow:at(-45,30),ClivSup:at(18,78),TubS:at(30,84),Nasion:at(100,90),C2ped:at(-6,12),C2pwS:at(-8,22),C2c:at(0,10),DuraV:at(-9,27),C2cm:at(-15,11)};
+  X.Brow=add(X.Nasion,{x:6,y:2});X.Chin=add(X.Brow,{x:-4,y:-115});
+  const c7=V.C7,d7=dr_((c7.sup.t+c7.inf.t)/2);X.C7cm=sub(mid(c7.sup.P,c7.inf.P),mul(d7,7));
+  const c5=V.C5,d5=dr_((c5.sup.t+c5.inf.t)/2),pw=mid(c5.sup.P,c5.inf.P);X.VBpw=pw;X.TP_VBp=pw;X.OPLLp=sub(pw,mul(d5,4));X.SLp=sub(pw,mul(d5,13));X.TP_SL=sub(pw,mul(d5,14));X.TP_VBa=mid(c5.sup.A,c5.inf.A);
+  X.Stern=add(F.T1c[0],{x:58,y:-28});
+  const s1=V.S1.sup,M0=s1.c,PT=o.pt||15,H=sub(M0,mul({x:-Math.sin(PT*D2R),y:Math.cos(PT*D2R)},95));
+  X.S1pwI=add(s1.P,mul(dr_(s1.t-98),28));
+  const Hp=[add(H,{x:3,y:1.5}),sub(H,{x:3,y:1.5})];
+  // bounding
+  const cran=at(25,110),all=[];Object.values(F).forEach(a=>a.forEach(q=>all.push(q)));Object.values(X).forEach(q=>all.push(q));
+  all.push({x:cran.x-95,y:cran.y+95},{x:cran.x+95,y:cran.y},H,add(H,{x:30,y:-120}));
+  const m=25,k=2.6,minx=Math.min(...all.map(q=>q.x))-m,maxx=Math.max(...all.map(q=>q.x))+m,miny=Math.min(...all.map(q=>q.y))-m,maxy=Math.max(...all.map(q=>q.y))+m;
+  const I=q=>({x:(q.x-minx)*k,y:(maxy-q.y)*k});
+  const cv2=document.createElement('canvas');cv2.width=Math.round((maxx-minx)*k);cv2.height=Math.round((maxy-miny)*k);const x=cv2.getContext('2d');
+  const g=x.createLinearGradient(0,0,cv2.width,0);g.addColorStop(0,'#0b0d0f');g.addColorStop(.5,'#16191c');g.addColorStop(1,'#0b0d0f');x.fillStyle=g;x.fillRect(0,0,cv2.width,cv2.height);
+  const poly=(pts,fill,stroke,lw)=>{x.beginPath();pts.forEach((q,i)=>{const s=I(q);i?x.lineTo(s.x,s.y):x.moveTo(s.x,s.y)});x.closePath();if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
+  const circ=(q,r,fill,stroke,lw)=>{const s=I(q);x.beginPath();x.arc(s.x,s.y,r*k,0,7);if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
+  const line=(a,b,col,lw)=>{const A=I(a),B=I(b);x.strokeStyle=col;x.lineWidth=lw*k;x.lineCap='round';x.beginPath();x.moveTo(A.x,A.y);x.lineTo(B.x,B.y);x.stroke()};
+  // soft tissue
+  x.globalAlpha=.5;circ(cran,95,'#2a2e33');x.globalAlpha=1;circ(cran,95,null,'#8d939a',6);
+  // pelvis & femur
+  x.globalAlpha=.55;poly([add(H,{x:-55,y:-10}),add(H,{x:-40,y:110}),add(H,{x:45,y:120}),add(H,{x:60,y:20}),add(H,{x:30,y:-40})],'#3a3f45');x.globalAlpha=1;
+  line(H,add(H,{x:22,y:-130}),'#7a8087',30);Hp.forEach(h=>circ(h,24,'#8e959c','#c9ced3',3));
+  // sacrum
+  const w=dr_(s1.t-98);poly([s1.A,s1.P,add(s1.P,mul(w,55)),add(add(s1.P,mul(w,95)),mul(dr_(s1.t),20)),add(s1.A,mul(dr_(s1.t-80),60))],'#9aa1a8','#d6dade',2.5);
+  // vertebrae
+  for(const nm of LV.slice(1)){const v=V[nm];if(nm==='C2')continue;const sp=sub(mid(v.sup.P,v.inf.P),mul(dr_((v.sup.t+v.inf.t)/2),nm[0]==='C'?20:nm[0]==='T'?26:30));
+    line(mid(v.sup.P,v.inf.P),add(sp,{x:0,y:nm[0]==='T'?-10:-4}),'#646b72',nm[0]==='C'?5:8);
+    poly([v.sup.A,v.sup.P,v.inf.P,v.inf.A],'#b9bfc5','#e5e8eb',2.5)}
+  if(o.fuse){const fz=['T10','T11','T12','L1','L2','L3','L4','L5'],rod=[];
+    fz.forEach(nm=>{const v=V[nm],cc=mid(mid(v.sup.A,v.sup.P),mid(v.inf.A,v.inf.P)),e=dr_((v.sup.t+v.inf.t)/2),hd=sub(cc,mul(e,v.sup.w/2+16));
+      line(add(cc,mul(e,v.sup.w*.25)),hd,'#f6f7f8',3.2);circ(hd,4,'#f6f7f8');rod.push(hd)});
+    const sh=sub(add(s1.P,mul(dr_(s1.t-98),14)),mul(dr_(s1.t),12));line(add(sh,mul(dr_(s1.t-60),30)),sh,'#f6f7f8',3.2);rod.push(sh);
+    x.strokeStyle='#ffffff';x.lineWidth=2.6*k;x.lineJoin='round';x.beginPath();rod.forEach((q,i)=>{const p=I(q);i?x.lineTo(p.x,p.y):x.moveTo(p.x,p.y)});x.stroke();
+    F.UIVinf=[V.T10.inf.A,V.T10.inf.P];F.UIV2sup=[V.T8.sup.A,V.T8.sup.P]}
+  // C2 + dens, C1
+  poly([c2.A,c2.P,X.C2pwS,at(-5,30),at(-2,37),at(3,36),at(6,28),at(9,18)],'#b9bfc5','#e5e8eb',2.5);
+  line(at(-8,10),at(-30,4),'#646b72',7);
+  x.save();const a1=I(X.C1A);x.translate(a1.x,a1.y);x.beginPath();x.ellipse(0,0,5*k,8*k,0,0,7);x.fillStyle='#b9bfc5';x.fill();x.strokeStyle='#e5e8eb';x.lineWidth=2;x.stroke();x.restore();
+  x.save();const p1=I(X.C1P);x.translate(p1.x,p1.y);x.beginPath();x.ellipse(0,0,6*k,8*k,0,0,7);x.fillStyle='#a9b0b6';x.fill();x.strokeStyle='#e5e8eb';x.lineWidth=2;x.stroke();x.restore();
+  // skull base
+  line(X.Basion,X.ClivSup,'#c3c8cd',8);line(X.ClivSup,X.TubS,'#c3c8cd',5);line(X.TubS,X.Nasion,'#9aa1a8',4);
+  poly([X.Opis,X.OccLow,at(-70,60),at(-60,95),at(-35,60)],'#9aa1a8','#d6dade',2.5);
+  line(X.PNS,add(X.PNS,mul(d2,48)),'#c3c8cd',7);
+  x.globalAlpha=.6;line(X.Nasion,X.Chin,'#555b61',4);x.globalAlpha=1;
+  line(X.Stern,add(X.Stern,{x:8,y:-50}),'#9aa1a8',10);
+  addNoise(cv2,14);
+  x.fillStyle='rgba(241,210,100,.9)';x.font='600 '+Math.round(13*k/2.6*1.6)+'px system-ui,sans-serif';x.fillText('DEMO シェーマ（実画像ではありません）',16,34);
+  // landmarks to image px
+  const pts={},put=(key,arr)=>{if(LM[key])pts[key]=arr.map(I)};
+  for(const kk in F){if(LM[kk]&&!DER[kk])put(kk,F[kk])}
+  for(const kk in X)put(kk,[X[kk]]);put('Hip',Hp);
+  return{canvas:cv2,pts,mmpp:1/k}}
+function buildDemoCor(o={}){
+  const LV=['S1','L5','L4','L3','L2','L1','T12','T11','T10','T9','T8','T7','T6','T5','T4','T3','T2','T1','C7'];
+  const dim=n=>{const t=n[0],kk=+n.slice(1);if(t==='S')return{w:52,h:0,d:0};if(t==='L')return{w:50,h:27,d:10};if(t==='T')return{w:30+(kk-1)*1.2,h:17+(kk-1)*.55,d:5};return{w:24,h:13.5,d:5}};
+  const Y={};let y=0;Y.S1={sup:0};for(let i=1;i<LV.length;i++){const nm=LV[i],d=dim(nm);y+=d.d;const inf=y;y+=d.h;Y[nm]={inf,sup:y}}
+  const yT8=(Y.T8.inf+Y.T8.sup)/2,yL2=(Y.L2.inf+Y.L2.sup)/2;
+  const A1=o.a1??24,A2=o.a2??16,xc=yy=>A1*Math.exp(-(((yy-yT8)/95)**2))-A2*Math.exp(-(((yy-yL2)/55)**2));
+  const ep=(yy,w)=>{const s=(xc(yy+.5)-xc(yy-.5));const t=Math.atan2(-s,1)*R2D,c={x:xc(yy),y:yy},e=dr_(t);return{A:add(c,mul(e,w/2)),P:sub(c,mul(e,w/2)),c,t}};
+  const V={};LV.forEach(nm=>{const w=dim(nm).w;V[nm]={sup:ep(Y[nm].sup,w),inf:Y[nm].inf!=null?ep(Y[nm].inf,w):null,w}});
+  const cen=nm=>{const v=V[nm];return mid(v.sup.c,v.inf.c)};
+  let uT=null,lT=null,uL=null,lL=null;
+  ['T1','T2','T3','T4','T5','T6','T7','T8'].forEach(n=>{if(!uT||V[n].sup.t>V[uT].sup.t)uT=n});
+  ['T9','T10','T11','T12','L1'].forEach(n=>{if(!lT||V[n].inf.t<V[lT].inf.t)lT=n});
+  ['T12','L1','L2'].forEach(n=>{if(!uL||V[n].sup.t<V[uL].sup.t)uL=n});
+  ['L2','L3','L4','L5'].forEach(n=>{if(!lL||V[n].inf.t>V[lL].inf.t)lL=n});
+  const yT1=Y.T1.sup;
+  const X={AP_C7c:cen('C7'),AP_S1c:V.S1.sup.c,AP_apexT:cen('T8'),AP_apexL:cen('L2'),
+    AP_clavR:{x:120,y:yT1-8},AP_clavL:{x:-120,y:yT1-12},AP_shR:{x:165,y:yT1+14},AP_shL:{x:-165,y:yT1+6},
+    AP_icR:{x:118,y:Y.L4.sup+4},AP_icL:{x:-118,y:Y.L4.sup},AP_fhR:{x:92,y:-92},AP_fhL:{x:-92,y:-96}};
+  const t8=V.T8,e8=dr_((t8.sup.t+t8.inf.t)/2),c8=cen('T8');X.AP_vCx=add(c8,mul(e8,t8.w/2));X.AP_vCc=sub(c8,mul(e8,t8.w/2));X.AP_ped=add(c8,mul(e8,t8.w*.25));
+  const l2=V.L2,e2=dr_((l2.sup.t+l2.inf.t)/2),cl2=cen('L2');X.AP_laPm=add(cl2,mul(e2,l2.w*.2));X.AP_laE=add(cl2,mul(e2,l2.w/2));
+  const L={AP_mtU:V[uT].sup,AP_mtL:V[lT].inf,AP_tlU:V[uL].sup,AP_tlL:V[lL].inf,AP_L4sup:V.L4.sup,AP_S1sup:V.S1.sup,AP_T1sup:V.T1.sup};
+  const all=[];Object.values(X).forEach(q=>all.push(q));all.push({x:190,y:yT1+40},{x:-190,y:-150});
+  const m=20,k=2.6,minx=Math.min(...all.map(q=>q.x))-m,maxx=Math.max(...all.map(q=>q.x))+m,miny=Math.min(...all.map(q=>q.y))-m,maxy=Math.max(...all.map(q=>q.y))+m;
+  const I=q=>({x:(maxx-q.x)*k,y:(maxy-q.y)*k}); // image left = patient right
+  const cv2=document.createElement('canvas');cv2.width=Math.round((maxx-minx)*k);cv2.height=Math.round((maxy-miny)*k);const x=cv2.getContext('2d');
+  const g=x.createRadialGradient(cv2.width/2,cv2.height*.45,50,cv2.width/2,cv2.height*.45,cv2.width);g.addColorStop(0,'#1a1d20');g.addColorStop(1,'#08090a');x.fillStyle=g;x.fillRect(0,0,cv2.width,cv2.height);
+  const poly=(pts,fill,stroke,lw)=>{x.beginPath();pts.forEach((q,i)=>{const s=I(q);i?x.lineTo(s.x,s.y):x.moveTo(s.x,s.y)});x.closePath();if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
+  const circ=(q,r,fill,stroke,lw)=>{const s=I(q);x.beginPath();x.arc(s.x,s.y,r*k,0,7);if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
+  const line=(a,b,col,lw)=>{const A=I(a),B=I(b);x.strokeStyle=col;x.lineWidth=lw*k;x.lineCap='round';x.beginPath();x.moveTo(A.x,A.y);x.lineTo(B.x,B.y);x.stroke()};
+  // torso soft tissue
+  x.globalAlpha=.35;poly([{x:175,y:yT1+20},{x:150,y:Y.L1.sup},{x:140,y:-40},{x:-140,y:-40},{x:-150,y:Y.L1.sup},{x:-175,y:yT1+20}],'#2d3237');x.globalAlpha=1;
+  // ribs
+  x.globalAlpha=.55;['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'].forEach((n,i)=>{const c=cen(n);[1,-1].forEach(sg=>{const A=I(add(c,{x:sg*18,y:0})),B=I(add(c,{x:sg*(110+i*4),y:-10-i*2})),C=I(add(c,{x:sg*(125+i*3),y:-60-i*3}));
+    x.strokeStyle='#8a9197';x.lineWidth=4;x.beginPath();x.moveTo(A.x,A.y);x.quadraticCurveTo(B.x,B.y,C.x,C.y);x.stroke()})});x.globalAlpha=1;
+  // clavicles
+  line({x:14,y:yT1-2},X.AP_clavR,'#b6bcc2',8);line({x:-14,y:yT1-4},X.AP_clavL,'#b6bcc2',8);
+  // pelvis
+  x.globalAlpha=.75;[1,-1].forEach(sg=>{poly([{x:sg*28,y:-5},{x:sg*(sg>0?X.AP_icR.x:-X.AP_icL.x),y:(sg>0?X.AP_icR.y:X.AP_icL.y)},{x:sg*130,y:Y.L5.inf-20},{x:sg*100,y:-80},{x:sg*40,y:-70}],'#7d848a','#c3c8cd',2)});x.globalAlpha=1;
+  poly([V.S1.sup.A,V.S1.sup.P,{x:-8,y:-80},{x:8,y:-80}],'#a3aab0','#d6dade',2.5);
+  circ({x:92,y:-116},24,'#8e959c','#c9ced3',3);circ({x:-92,y:-120},24,'#8e959c','#c9ced3',3);
+  // vertebrae
+  LV.slice(1).forEach(nm=>{const v=V[nm];poly([v.sup.A,v.sup.P,v.inf.P,v.inf.A],'#b9bfc5','#e5e8eb',2.2);
+    const c=mid(v.sup.c,v.inf.c),e=dr_((v.sup.t+v.inf.t)/2),hh=Math.max(4,(Y[nm].sup-Y[nm].inf)*.22);
+    [1,-1].forEach(sg=>{const pc=add(c,mul(e,sg*v.w*(nm==='T8'?(sg>0?.25:.38):.32)));const s=I(pc);x.beginPath();x.ellipse(s.x,s.y,v.w*.09*k,hh*k,0,0,7);x.strokeStyle='#eef0f2';x.lineWidth=2.4;x.stroke()});
+    const s=I(c);x.beginPath();x.ellipse(s.x,s.y+hh*k*.6,2.5*k,hh*k*.9,0,0,7);x.fillStyle='#d5d9dd';x.fill()});
+  addNoise(cv2,14);
+  x.fillStyle='rgba(241,210,100,.9)';x.font='600 21px system-ui,sans-serif';x.fillText('DEMO シェーマ（実画像ではありません）',16,34);x.fillStyle='#e4eaef';x.font='600 28px system-ui,sans-serif';x.fillText('R',22,76);
+  const pts={};for(const kk in X)pts[kk]=[I(X[kk])];for(const kk in L)pts[kk]=[I(L[kk].A),I(L[kk].P)];
+  return{canvas:cv2,pts,mmpp:1/k}}
+
+/* ================= patients · studies · trend ================= */
+const TPL=['初診','術前','術直後','術後1週','術後1か月','術後3か月','術後6か月','術後1年','術後2年','術後5年','最終観察','経過観察'];
+let DL=null;try{if(window.claude&&window.claude.use)window.claude.use('downloads').then(d=>{DL=d}).catch(()=>{})}catch(e){}
+async function saveFile(name,data){if(!DL){const blob=data instanceof Blob?data:new Blob([data],{type:/\.csv$/.test(name)?'text/csv':'application/json'});
+    try{const f=new File([blob],name,{type:blob.type});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});toast('共有メニューから「"ファイル"に保存」を選んでください');return true}}catch(e){if(e&&e.name==='AbortError')return false}
+    try{const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);toast('保存しました');return true}catch(e){toast('保存できませんでした');return false}}
+  try{await DL.save({filename:name,data});toast('保存しました');return true}catch(e){if(e&&e.code!=='declined')toast('保存できませんでした（'+((e&&e.code)||'エラー')+'）');return false}}
+function countVals(sid){return Object.keys(studyValues(sid)).length}
+function nextLabel(pid){const n=DBI.studies.filter(x=>x.pid===pid).length;return n===0?'術前':n===1?'術後3か月':n===2?'術後1年':'経過観察'}
+function openPatients(view,pid){if(st.sid)saveNow();
+  if(view==='patient'&&pid!==undefined&&(pid==='new'||DBI.patients.find(x=>x.id===pid)))return patientView(pid);
+  listView('')}
+function listView(q){const ql=q.trim().toLowerCase();
+  const ps=DBI.patients.filter(p=>!ql||[p.code,p.name,p.dx,p.op].join(' ').toLowerCase().includes(ql));
+  const rows=ps.map(p=>{const ss=DBI.studies.filter(x=>x.pid===p.id).sort(byDate),last=ss[ss.length-1];
+    return`<button class="prow${p.id===st.pid?' on':''}" data-pid="${p.id}"><span style="min-width:0"><b>${esc(p.code||'ID未入力')}</b>${p.name?' <span class="small">'+esc(p.name)+'</span>':''}<small>${esc([p.dx,p.op].filter(Boolean).join(' / ')||'診断未入力')}</small></span><span class="rt">${ss.length} 回${last&&last.date?'<br>'+esc(last.date):''}</span></button>`}).join('');
+  openModal(`<div class="mh"><h2>患者・測定日</h2><button class="btn sm ghost" data-x>閉じる</button></div>
+   <div class="fl"><input type="text" id="pq" placeholder="ID・氏名・診断で検索" value="${esc(q)}" style="flex:1;min-width:0;height:38px;border-radius:8px;border:1px solid var(--line);background:var(--bg);padding:0 10px"><button class="btn sm pri" id="pNew">新規患者</button></div>
+   <div class="plist">${rows||'<p class="small" style="padding:12px">該当する患者はいません。</p>'}</div>
+   <p class="small">個人情報保護のため、実名ではなく院内 ID や匿名化コードの使用をおすすめします。データはこの端末のブラウザ内だけに保存されます。ブラウザのデータ消去で失われるため、定期的にバックアップを保存してください。</p>
+   <div class="fs"><span class="lab">バックアップ</span>
+    <div class="fl"><button class="btn sm" id="bkAll">画像を含めて保存</button><button class="btn sm" id="bkData">計測データのみ保存</button><label class="btn sm ghost" for="bkIn">バックアップから復元</label><input type="file" id="bkIn" class="vh" accept=".json,application/json"></div>
+    <p class="small">保存ファイル（JSON）は別の端末で「復元」すると取り込めます。同じ ID のデータは上書きされます。</p></div>`);
+  const qi=$('pq');qi.oninput=()=>{const v=qi.value,pos=qi.selectionStart;listView(v);const n=$('pq');n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}};
+  $('pNew').onclick=()=>patientView('new');
+  $('mc').querySelectorAll('[data-pid]').forEach(b=>b.onclick=()=>patientView(b.dataset.pid));
+  $('bkAll').onclick=()=>doBackup(true);$('bkData').onclick=()=>doBackup(false);
+  $('bkIn').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const n=await importBackup(f);listView('');toast(n+' 名の患者データを復元しました')}catch(err){toast(err.message||'復元に失敗しました')}}}
+function patientView(pid){const isNew=pid==='new',p=isNew?{code:'',name:'',dob:'',age:'',sex:'',dx:'',op:'',memo:''}:DBI.patients.find(x=>x.id===pid);
+  const ss=isNew?[]:DBI.studies.filter(x=>x.pid===pid).sort(byDate);
+  const f=(k,lab,type='text',ph='')=>`<div class="fld"><label for="pf_${k}">${lab}</label><input id="pf_${k}" type="${type}" value="${esc(p[k]||'')}" placeholder="${ph}"></div>`;
+  const srows=ss.map(s=>`<div class="srow${s.id===st.sid?' on':''}" data-sid="${s.id}"><input value="${esc(s.label)}" data-f="label" list="tplList" aria-label="時点"><input type="date" value="${esc(s.date||'')}" data-f="date" aria-label="測定日">
+     <span class="meta">${countVals(s.id)} 項目計測${s.id===st.sid?' · 表示中':''}</span><span class="sa"><button class="btn sm danger" data-del="0">削除</button><button class="btn sm pri" data-open>開く</button></span></div>`).join('');
+  openModal(`<div class="mh"><h2>${isNew?'新規患者':esc(p.code||'患者情報')}</h2><span class="fl"><button class="btn sm ghost" id="pBackL">一覧</button><button class="btn sm ghost" data-x>閉じる</button></span></div>
+   <div class="grid2">${f('code','患者 ID（必須）','text','院内ID・匿名化コード')}${f('name','氏名・イニシャル（任意）')}${f('dob','生年月日','date')}${f('age','年齢（生年月日がない場合）','number')}
+    <div class="fld"><label for="pf_sex">性別</label><select id="pf_sex">${['','男性','女性'].map(v=>`<option${p.sex===v?' selected':''}>${v}</option>`).join('')}</select></div>${f('dx','診断')}${f('op','術式・手術日')}</div>
+   <div class="fld"><label for="pf_memo">メモ</label><textarea id="pf_memo">${esc(p.memo||'')}</textarea></div>
+   <div class="fl"><button class="btn sm pri" id="pSave">${isNew?'登録する':'患者情報を保存'}</button>${!isNew?'<button class="btn sm" id="pTrend">推移を見る</button>':''}</div>
+   ${isNew?'':`<div class="fs"><span class="lab">測定日（${ss.length} 回）</span>
+    <div class="plist">${srows||'<p class="small" style="padding:12px">まだ測定日がありません。下で追加してください。</p>'}</div>
+    <div class="srow" style="border:1px dashed var(--line);border-radius:12px"><input id="nsL" list="tplList" value="${esc(nextLabel(pid))}" aria-label="新しい時点"><input id="nsD" type="date" value="${today()}" aria-label="測定日"><span class="meta">術前・術後など時点を選ぶか入力</span><span class="sa"><button class="btn sm pri" id="nsAdd">追加して開く</button></span></div>
+    <p class="small">時点名と日付は一覧で直接書き換えられます。過去の測定日を開いて、点の追加・修正もできます。</p></div>
+   <div class="fs"><span class="lab">患者の削除</span><div class="fl"><button class="btn sm danger" id="pDel" data-step="0">この患者と全測定を削除</button></div></div>`}
+   <datalist id="tplList">${TPL.map(t=>`<option value="${t}">`).join('')}</datalist>`);
+  $('pBackL').onclick=()=>listView('');
+  $('pSave').onclick=async()=>{const o={};['code','name','dob','age','dx','op','memo'].forEach(k=>o[k]=$('pf_'+k).value.trim());o.sex=$('pf_sex').value;
+    if(!o.code){toast('患者 ID を入力してください');$('pf_code').focus();return}
+    if(isNew){const id=addPatient(o);patientView(id);toast('登録しました。測定日を追加してください')}else{Object.assign(p,o);saveIndex();renderAll();toast('保存しました')}};
+  if(isNew)return;
+  $('pTrend').onclick=()=>openTrend(pid);
+  $('nsAdd').onclick=async()=>{const id=addStudy(pid,$('nsL').value.trim()||'測定',$('nsD').value);closeModal();await openStudy(id);toast('新しい測定日を開きました。画像を読み込んでください')};
+  $('mc').querySelectorAll('.srow[data-sid]').forEach(r=>{const sid=r.dataset.sid,e=DBI.studies.find(x=>x.id===sid);
+    r.querySelectorAll('input[data-f]').forEach(inp=>inp.onchange=()=>{e[inp.dataset.f]=inp.value.trim();saveIndex();renderTop()});
+    r.querySelector('[data-open]').onclick=async()=>{closeModal();await openStudy(sid)};
+    const d=r.querySelector('[data-del]');d.onclick=async()=>{if(d.dataset.del==='0'){d.dataset.del='1';d.textContent='もう一度で削除';setTimeout(()=>{if(d.isConnected){d.dataset.del='0';d.textContent='削除'}},3000);return}
+      await deleteStudy(sid);patientView(pid);toast('測定日を削除しました')}});
+  const pd=$('pDel');pd.onclick=async()=>{if(pd.dataset.step==='0'){pd.dataset.step='1';pd.textContent='もう一度押すと完全に削除します';setTimeout(()=>{if(pd.isConnected){pd.dataset.step='0';pd.textContent='この患者と全測定を削除'}},3000);return}
+    await deletePatient(pid);listView('');toast('削除しました')}}
+const KEYP=['pi','pt','ss','ll','pill','lll','ldi','sva','tpa','gt','l1pa','t4l1','odha','gap','c27','t1s','tscl','csva','cbva','tk412','tk512','tlk','pjk','cobbMT','cobbTL','cobbFr','c7csvl','rsh','lka'];
+function niceStep(x){const p=10**Math.floor(Math.log10(x||1)),m=x/p;return(m<1.5?1:m<3?2:m<7?5:10)*p}
+function shortDate(d){return d?d.slice(2).replace(/-/g,'/'):''}
+function chartSVG(ss,vals,id){const p=PID[id];const pts=ss.map((s,i)=>({i,s,r:vals[i][id]})).filter(o=>o.r&&typeof o.r.v==='number');
+  if(!pts.length)return'<p class="small" style="padding:6px">この項目は数値の推移がありません。</p>';
+  const W=340,H=190,L=40,Rg=34,T=24,B=42,n=ss.length,X=i=>n===1?(L+(W-L-Rg)/2):L+(W-L-Rg)*i/(n-1);
+  let mn=Math.min(...pts.map(o=>o.r.v)),mx=Math.max(...pts.map(o=>o.r.v));if(mx-mn<1e-9){mn-=5;mx+=5}const pd=(mx-mn)*.18;mn-=pd;mx+=pd;
+  const stp=niceStep((mx-mn)/4),Y=v=>T+(H-T-B)*(1-(v-mn)/(mx-mn));let g='';
+  for(let v=Math.ceil(mn/stp)*stp;v<=mx;v+=stp){const y=Y(v).toFixed(1);g+=`<line x1="${L}" x2="${W-Rg+6}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/><text x="${L-6}" y="${(+y+4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--mut)" font-family="IBM Plex Mono,monospace">${+v.toFixed(6)}</text>`}
+  if(mn<0&&mx>0)g+=`<line x1="${L}" x2="${W-Rg+6}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--mut)" stroke-width="1" stroke-dasharray="3 3"/>`;
+  const col=s=>s==='ok'?'var(--ok)':s==='warn'?'var(--warn)':s==='bad'?'var(--bad)':'var(--fg)';
+  const line=pts.map(o=>X(o.i).toFixed(1)+','+Y(o.r.v).toFixed(1)).join(' ');
+  const dots=pts.map(o=>{const x=X(o.i),y=Y(o.r.v);return`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${col(o.r.s)}" stroke="var(--panel)" stroke-width="2"/><text x="${x.toFixed(1)}" y="${(y-9).toFixed(1)}" text-anchor="middle" font-size="11" fill="var(--fg)" font-family="IBM Plex Mono,monospace">${esc(fmtV(o.r))}</text>`}).join('');
+  const xl=ss.map((s,i)=>{const x=X(i).toFixed(1),lab=s.label.length>6?s.label.slice(0,6)+'…':s.label;return`<text x="${x}" y="${H-24}" text-anchor="middle" font-size="10.5" fill="var(--fg)">${esc(lab)}</text><text x="${x}" y="${H-10}" text-anchor="middle" font-size="9.5" fill="var(--mut)" font-family="IBM Plex Mono,monospace">${shortDate(s.date)}</text>`}).join('');
+  const u=pts[0].r.u;
+  return`<div class="ct"><b>${esc(p.n)}</b><span>${esc(u==='px'?'px':u||'比')}</span></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(p.n)}の推移">${g}<polyline points="${line}" fill="none" stroke="var(--acc)" stroke-width="2"/>${dots}${xl}</svg>`}
+function trendData(pid){const ss=DBI.studies.filter(x=>x.pid===pid).sort(byDate);const vals=ss.map(s=>studyValues(s.id));
+  const all=P.filter(q=>q.r!=='free'&&vals.some(v=>v[q.id]));return{ss,vals,all}}
+function trendCSV(pid){const {ss,vals,all}=trendData(pid),p=DBI.patients.find(x=>x.id===pid);
+  const q=x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"';
+  let c=[q('患者ID'),q(p.code),q('診断'),q(p.dx||''),q('術式'),q(p.op||'')].join(',')+'\n';
+  c+=[q('項目'),q('単位'),...ss.map(s=>q(s.label+' '+(s.date||'')))].join(',')+'\n';
+  all.forEach(r=>{const u=(vals.find(v=>v[r.id])||{})[r.id];c+=[q(r.n),q(u?u.u:''),...vals.map(v=>q(v[r.id]?fmtV(v[r.id]):''))].join(',')+'\n'});return c}
+function openTrend(pid){if(st.sid)saveNow();pid=pid||st.pid;const p=DBI.patients.find(x=>x.id===pid);if(!p){toast('患者が選択されていません');openPatients('list');return}
+  const {ss,vals,all}=trendData(pid);
+  const regs=[{id:'key',n:'主要項目'}].concat(REG.filter(r=>all.some(q=>q.r===r.id)).map(r=>({id:r.id,n:r.n})));
+  if(!regs.find(r=>r.id===st.trReg))st.trReg='key';
+  let rows=st.trReg==='key'?all.filter(q=>KEYP.includes(q.id)).sort((a,b)=>KEYP.indexOf(a.id)-KEYP.indexOf(b.id)):all.filter(q=>q.r===st.trReg);
+  if(st.trReg==='key'&&!rows.length){st.trReg=regs[1]?regs[1].id:'key';rows=all.filter(q=>q.r===st.trReg)}
+  if(!rows.find(q=>q.id===st.trSel)){const num=q=>vals.map(v=>v[q.id]).filter(r=>r&&typeof r.v==='number').map(r=>r.v);st.trSel=(rows.find(q=>{const a=num(q);return a.length>1&&Math.max(...a)-Math.min(...a)>0.05})||rows.find(q=>num(q).length)||rows[0]||{}).id||null}
+  const cell=r=>r?`<span class="${r.s||''}">${esc(fmtV(r))}</span>`:'<span style="color:var(--mut)">—</span>';
+  const delta=q=>{const nv=vals.map(v=>v[q.id]).filter(r=>r&&typeof r.v==='number');if(nv.length<2)return'';const d=nv[nv.length-1].v-nv[0].v;return(d>0?'+':'')+(q.id==='gap'?d.toFixed(0):Math.abs(d)<10&&nv[0].u===''?d.toFixed(2):d.toFixed(1))};
+  const tbl=rows.length?`<div class="tblwrap flush"><table class="trtbl"><thead><tr><th>項目</th>${ss.map(s=>`<th>${esc(s.label)}<br>${esc(shortDate(s.date))}</th>`).join('')}<th>変化<br>初回→最新</th></tr></thead><tbody>${rows.map(q=>{const u=(vals.find(v=>v[q.id])||{})[q.id];
+      return`<tr data-q="${q.id}" class="${q.id===st.trSel?'on':''}"><td>${esc(q.n)}${u&&u.u&&u.u!=='点'?' <span style="color:var(--mut)">('+esc(u.u)+')</span>':''}</td>${vals.map(v=>`<td class="n">${cell(v[q.id])}</td>`).join('')}<td class="n">${delta(q)}</td></tr>`}).join('')}</tbody></table></div>`:'<p class="small">まだ計測値がありません。測定日を開いて計測してください。</p>';
+  openModal(`<div class="mh"><h2>推移 · ${esc(p.code||'')}</h2><span class="fl"><button class="btn sm ghost" id="tPat">患者情報</button><button class="btn sm ghost" data-x>閉じる</button></span></div>
+   <p class="small">${esc([p.name,p.dx,p.op].filter(Boolean).join(' / ')||'')}${ss.length?' · 測定 '+ss.length+' 回':''}</p>
+   <nav class="chips" id="tReg">${regs.map(r=>`<button data-r="${r.id}" aria-pressed="${r.id===st.trReg}">${esc(r.n)}</button>`).join('')}</nav>
+   ${st.trSel?`<div class="chart">${chartSVG(ss,vals,st.trSel)}</div>`:''}
+   ${tbl}
+   <p class="small">行をタップするとグラフの項目が切り替わります。色は各時点の判定（基準内・境界・基準外）です。</p>
+   <div class="fl"><button class="btn sm" id="tCopy">表をコピー（CSV）</button><button class="btn sm" id="tSave">CSV ファイルを保存</button></div>
+   <textarea id="tTxt" readonly hidden></textarea>`);
+  $('tPat').onclick=()=>patientView(pid);
+  $('tReg').onclick=e=>{const b=e.target.closest('[data-r]');if(!b)return;st.trReg=b.dataset.r;openTrend(pid)};
+  $('mc').querySelectorAll('tr[data-q]').forEach(tr=>tr.onclick=()=>{st.trSel=tr.dataset.q;const sc=$('mc').scrollTop;openTrend(pid);$('mc').scrollTop=sc});
+  $('tCopy').onclick=()=>{const c=trendCSV(pid),ta=$('tTxt');try{navigator.clipboard.writeText(c).then(()=>toast('コピーしました'),()=>{ta.hidden=false;ta.value=c;ta.focus();ta.select();toast('選択しました。長押しでコピーしてください')})}catch(e){ta.hidden=false;ta.value=c;ta.select()}};
+  $('tSave').onclick=()=>saveFile('spine-trend-'+(p.code||'patient').replace(/[^\w\-]+/g,'_')+'.csv','﻿'+trendCSV(pid))}
+/* backup */
+const blobToDataURL=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(b)});
+function dataURLtoBlob(u){const [h,d]=u.split(',');const m=(h.match(/data:([^;]+)/)||[])[1]||'application/octet-stream';const bin=atob(d),a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:m})}
+async function doBackup(withImg){if(st.sid)saveNow();toast('バックアップを作成しています…');
+  const recs={};DBI.studies.forEach(s=>{if(REC[s.id])recs[s.id]=REC[s.id]});
+  const out={app:'spine-align',version:2,exported:new Date().toISOString(),withImages:withImg,patients:DBI.patients,studies:DBI.studies,records:recs,images:{}};
+  if(withImg){await new Promise(r=>setTimeout(r,300));for(const s of DBI.studies)for(const sl of SLOTS){const b=await idbGet('img:'+s.id+':'+sl.id);if(b)out.images[s.id+':'+sl.id]=await blobToDataURL(b)}}
+  const d=new Date(),stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+  await saveFile('spine-align-backup-'+stamp+(withImg?'':'-data')+'.json',new Blob([JSON.stringify(out)],{type:'application/json'}))}
+async function importBackup(file){let o;try{o=JSON.parse(await file.text())}catch(e){throw new Error('JSON ファイルとして読み込めませんでした')}
+  if(!o||o.app!=='spine-align'||!Array.isArray(o.patients)||!Array.isArray(o.studies))throw new Error('このアプリのバックアップファイルではありません');
+  o.patients.forEach(p=>{const i=DBI.patients.findIndex(x=>x.id===p.id);if(i>=0)DBI.patients[i]=p;else DBI.patients.push(p)});
+  o.studies.forEach(s=>{const i=DBI.studies.findIndex(x=>x.id===s.id);if(i>=0)DBI.studies[i]=s;else DBI.studies.push(s)});
+  for(const sid in (o.records||{})){REC[sid]=o.records[sid];await idbSet('study:'+sid,o.records[sid])}
+  for(const k in (o.images||{})){try{await idbSet('img:'+k,dataURLtoBlob(o.images[k]))}catch(e){}}
+  saveIndex();if(st.sid&&o.records&&o.records[st.sid])await openStudy(st.sid,{noSave:true});else renderAll();return o.patients.length}
+async function boot(){try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
+const idx=await idbGet('index');
+  if(idx&&Array.isArray(idx.patients)){DBI=idx}else{await migrateV1();createDemo()}
+  for(const s of DBI.studies)if(!REC[s.id])REC[s.id]=await idbGet('study:'+s.id)||{slots:{}};
+  const u=await idbGet('ui')||{};st.age=u.age||'';
+  const sid=(u.sid&&DBI.studies.find(x=>x.id===u.sid))?u.sid:(DBI.studies.find(x=>x.id==='demo-pre')||DBI.studies[0]||{}).id;
+  if(sid)await openStudy(sid,{noSave:true});else renderAll()}
+
+/* ================= boot ================= */
+(function check(){P.forEach(p=>p.lm.forEach(k=>{if(!LM[k])console.error('missing landmark',p.id,k)}))})();
+renderAll();
+boot();
+if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
+</script>
+
+</body>
+</html>
