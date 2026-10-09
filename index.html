@@ -72,6 +72,19 @@ button{cursor:pointer}
 #prompt .sub{color:var(--anno);font-weight:600}
 #prompt .hint{font-size:12px;color:var(--mut);line-height:1.45}
 #prompt .pa{display:flex;gap:6px;flex-wrap:wrap}
+#prompt .pr{display:flex;gap:10px;align-items:flex-start}
+#prompt .pmn{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.gthumb{width:88px;height:88px;flex:none;border-radius:10px;border:1px solid var(--line);background:#0a0d10;padding:0;overflow:hidden;position:relative}
+.gthumb svg{width:100%;height:100%;display:block}
+.gthumb span{position:absolute;left:0;right:0;bottom:0;font-size:9.5px;background:#000a;color:var(--fg);padding:2px 0;text-align:center;letter-spacing:.04em}
+.gfig{flex:none;border:1px solid var(--line);border-radius:12px;background:#0a0d10;overflow:hidden}
+.gfig svg{width:100%;height:auto;display:block}
+.gfig .cap{font-size:11.5px;color:var(--mut);padding:6px 10px;border-top:1px solid var(--line)}
+.glist{display:flex;flex-direction:column;gap:10px}
+.glist div{border-left:3px solid var(--line);padding:2px 0 2px 10px}
+.glist div.on{border-left-color:var(--acc)}
+.glist b{font-size:13.5px;font-weight:600}
+.glist p{margin:3px 0 0;font-size:12.5px;line-height:1.65;color:var(--mut)}
 #empty{position:absolute;inset:0;display:grid;place-items:center;padding:24px}
 #empty .card{max-width:340px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;color:var(--mut);line-height:1.6}
 #empty .card strong{color:var(--fg);font-size:16px;font-weight:600}
@@ -156,6 +169,7 @@ button{cursor:pointer}
 /* modal */
 #modal{position:fixed;inset:0;background:#000a;display:flex;align-items:flex-end;justify-content:center;z-index:20}
 #modal .mc{background:var(--panel);border:1px solid var(--line);border-radius:16px 16px 0 0;width:100%;max-width:560px;max-height:88vh;max-height:88dvh;overflow:auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
+#modal .mc>*{flex-shrink:0}
 @media (min-width:700px){#modal{align-items:center}#modal .mc{border-radius:16px}}
 .mh{display:flex;justify-content:space-between;align-items:center}
 .mh h2{margin:0;font-size:16px;font-weight:600}
@@ -196,8 +210,8 @@ textarea{width:100%;min-height:220px;background:var(--bg);border:1px solid var(-
     <canvas id="loupe" hidden></canvas>
     <div id="empty" hidden><div class="card"><strong>このスロットに画像がありません</strong><span>X線画像（JPEG / PNG / 非圧縮DICOM）を読み込みます。スマホで撮影したフィルムやモニターの写真も使えます。画像は端末内だけで処理され、外部には送信されません。</span><label class="btn pri" for="file">画像を読み込む</label></div></div>
     <div id="prompt" hidden>
-      <div class="pm"><span class="stp" id="pStep"></span><b id="pName"></b><span class="sub" id="pSub"></span></div>
-      <div class="hint" id="pHint"></div>
+      <div class="pr"><div class="pmn"><div class="pm"><span class="stp" id="pStep"></span><b id="pName"></b><span class="sub" id="pSub"></span></div>
+      <div class="hint" id="pHint"></div></div><button class="gthumb" id="pGuide" aria-label="この点の位置を図で確認"></button></div>
       <div class="pa"><button class="btn sm" id="pBack">1つ戻す</button><button class="btn sm" id="pSkip">スキップ</button><button class="btn sm ghost" id="pStop">終了</button></div>
     </div>
     <div class="zoomtag" id="ztag"></div>
@@ -556,7 +570,7 @@ const DYN=[{b:'c27',k:'a'},{b:'c27h',k:'a'},{b:'oc2',k:'a'},{b:'c12',k:'a'},{b:'
 /* ================= state ================= */
 const SLOTS=[{id:'lat',name:'側面',view:'s'},{id:'ap',name:'正面',view:'c'},{id:'flex',name:'前屈',view:'s'},{id:'ext',name:'後屈',view:'s'}];
 const S={};SLOTS.forEach(s=>S[s.id]={id:s.id,base:null,view:null,pts:{},mmpp:null,calSrc:'',facing:'auto',demo:false,vw:null,fname:'',adjKey:''});
-const st={slot:'lat',region:'lx',sel:'pi',mode:'idle',q:null,age:'',apStd:true,adj:{b:0,c:1,inv:false},labels:false,sheet:'mid',pid:null,sid:null,trReg:'key',trSel:null};
+const st={slot:'lat',region:'lx',sel:'pi',mode:'idle',q:null,age:'',apStd:true,adj:{b:0,c:1,inv:false},labels:false,guide:(()=>{try{return localStorage.getItem('sa-guide')!=='0'}catch(e){return true}})(),sheet:'mid',pid:null,sid:null,trReg:'key',trSel:null};
 let DBI={patients:[],studies:[]};const REC={};
 const hist=[];
 const cur=()=>S[st.slot];
@@ -764,7 +778,8 @@ function renderPrompt(){const el=$('prompt');if(st.mode!=='measure'||!st.q){el.h
   const sl=S[st.q.slot],rem=buildQueue(sl,st.q).length,d=LM[it.k];el.hidden=false;
   $('pStep').textContent=(st.q.total-rem+1)+' / '+st.q.total;$('pName').textContent=d.name;$('pSub').textContent=d.subs[it.i]||'';
   $('pHint').textContent=(d.hint?d.hint+'。':'')+'指でなぞると拡大鏡が出ます。離した位置に点を置きます。2本指で拡大・移動。';
-  $('pSkip').textContent=d.type==='pair'&&it.i===1?'片側のみ':'スキップ'}
+  $('pSkip').textContent=d.type==='pair'&&it.i===1?'片側のみ':'スキップ';
+  const gb=$('pGuide'),loc=st.guide?gLoc(it.k):null;gb.hidden=!loc;if(loc)gb.innerHTML=gSVG([{k:it.k,loc,act:it.i}],'thumb')+'<span>位置の見本</span>'}
 function rowHTML(p,r,sl,need){const sel=p.id===st.sel;
   const right=r?`<span class="dot ${r.s||''}"></span>${esc(fmtV(r))}<small>${esc(r.u==='点'?'点':unitTxt(r))}</small>`:`<span class="todo">${need} 点で測定</span>`;
   return`<button class="row" data-p="${p.id}" aria-current="${sel}"><span class="nm">${esc(p.n)}<small>${esc(r&&r.st?r.st:p.en)}</small></span><span class="val">${right}</span></button>`}
@@ -776,7 +791,7 @@ function renderBody(){const b=$('sbody'),reg=REG.find(r=>r.id===st.region);
     h+=`<div class="det"><div class="dt"><div><h3>${esc(p.n)}</h3><div class="en">${esc(p.en)}</div></div>${r?`<div class="big">${esc(fmtV(r))}<small>${esc(r.u==='点'?'点':unitTxt(r))}</small></div>`:''}</div>
     ${r?`<div class="fl">${r.s?`<span class="pill ${r.s}">${esc(r.st||STX[r.s])}</span>`:r.st?`<span class="pill na">${esc(r.st)}</span>`:''}${r.t?`<span class="note">${esc(r.t)}</span>`:''}</div>`:`<p class="note">あと ${need} 点の入力で計算します。</p>`}
     <p>${esc(p.ref)}</p>
-    <div class="acts">${r?`<button class="btn sm" data-a="zoom">この部位を拡大</button><button class="btn sm" data-a="redo">点を消して再測定</button>`:`<button class="btn sm pri" data-a="meas">測定を始める</button>`}<button class="btn sm ghost" data-a="close">閉じる</button></div></div>`}
+    <div class="acts">${r?`<button class="btn sm" data-a="legend">点の位置（凡例）</button><button class="btn sm" data-a="zoom">この部位を拡大</button><button class="btn sm" data-a="redo">点を消して再測定</button>`:`<button class="btn sm pri" data-a="meas">測定を始める</button><button class="btn sm" data-a="legend">点の位置（凡例）</button>`}<button class="btn sm ghost" data-a="close">閉じる</button></div></div>`}
   const lab=reg.v==='c'?'正面像':reg.v==='f'?'任意':'側面像';
   h+=`<div class="rhead"><span>${esc(reg.d)} · ${esc(SLOTS.find(s=>s.id===st.slot).name)}スロットで計算</span><button class="btn sm" data-a="all">まとめて測定</button></div>`;
   if(!sl.base)h+=`<p class="small">このスロットには画像がありません。上の「画像」から読み込んでください。</p>`;
@@ -807,10 +822,12 @@ $('sbody').addEventListener('click',e=>{const t=e.target.closest('[data-p],[data
   if(a==='close'){st.sel=null;renderAll()}
   else if(a==='meas'&&p)startMeasure([p.id]);
   else if(a==='redo'&&p){clearParamPts(p);startMeasure([p.id])}
+  else if(a==='legend'&&p){openGuide(p.lm,null,-1,p)}
   else if(a==='zoom'&&p){const sl=cur();const pts=p.lm.flatMap(k=>getPts(sl,k)||[]);if(pts.length){const xs=pts.map(q=>q.x),ys=pts.map(q=>q.y);
       const pad=Math.max(40,(Math.max(...xs)-Math.min(...xs)+Math.max(...ys)-Math.min(...ys))*0.2);
       fit(sl,{x0:Math.min(...xs)-pad,y0:Math.min(...ys)-pad,x1:Math.max(...xs)+pad,y1:Math.max(...ys)+pad});render()}}
   else if(a==='all'){startMeasure(P.filter(q=>q.r===st.region).map(q=>q.id))}});
+$('pGuide').onclick=()=>{const it=st.q&&curItem();if(it)openGuide([it.k],it.k,it.i)};
 $('pSkip').onclick=skipItem;$('pStop').onclick=stopMeasure;$('pBack').onclick=backItem;
 $('bUndo').onclick=undo;
 $('bFit').onclick=()=>{const sl=cur();fit(sl);render()};
@@ -840,7 +857,7 @@ function openSettings(calFocus){const sl=cur(),v=slotView(st.slot),c=sl.pts._cal
   <div class="fs"><span class="lab">画像の見え方</span>
     <div class="fl"><span class="small" style="width:72px">明るさ</span><input type="range" id="sB" min="-100" max="100" step="5" value="${st.adj.b}"><span class="v" id="sBv">${st.adj.b}</span></div>
     <div class="fl"><span class="small" style="width:72px">コントラスト</span><input type="range" id="sC" min="0.5" max="3" step="0.1" value="${st.adj.c}"><span class="v" id="sCv">${st.adj.c.toFixed(1)}</span></div>
-    <div class="fl"><label class="small"><input type="checkbox" id="sInv" ${st.adj.inv?'checked':''}> 白黒反転</label><label class="small"><input type="checkbox" id="sLab" ${st.labels?'checked':''}> すべての点に名前を表示</label></div></div>
+    <div class="fl"><label class="small"><input type="checkbox" id="sInv" ${st.adj.inv?'checked':''}> 白黒反転</label><label class="small"><input type="checkbox" id="sLab" ${st.labels?'checked':''}> すべての点に名前を表示</label><label class="small"><input type="checkbox" id="sGd" ${st.guide?'checked':''}> 測定中に位置の見本を表示</label></div></div>
   <div class="fs"><span class="lab">データ</span>
     <p class="small">患者・画像・点は、この端末のブラウザ内にだけ保存されます。バックアップは「患者・測定日」画面から保存できます。</p>
     <div class="fl"><button class="btn sm danger" id="sClr" data-step="0">このスロットの点を消去</button><button class="btn sm" id="sDemo">デモ症例を作り直す</button><button class="btn sm danger" id="sAll" data-step="0">全患者データを消去</button></div></div>`);
@@ -854,6 +871,7 @@ function openSettings(calFocus){const sl=cur(),v=slotView(st.slot),c=sl.pts._cal
   const adj=()=>{st.adj={b:+$('sB').value,c:+$('sC').value,inv:$('sInv').checked};$('sBv').textContent=st.adj.b;$('sCv').textContent=st.adj.c.toFixed(1);render()};
   $('sB').oninput=adj;$('sC').oninput=adj;$('sInv').onchange=adj;
   $('sLab').onchange=e=>{st.labels=e.target.checked;render()};
+  $('sGd').onchange=e=>{st.guide=e.target.checked;try{localStorage.setItem('sa-guide',st.guide?'1':'0')}catch(err){}renderPrompt()};
   const two=(el,fn)=>{el.onclick=()=>{if(el.dataset.step==='0'){el.dataset.step='1';el.textContent='もう一度押すと消去します';setTimeout(()=>{if(el.isConnected){el.dataset.step='0';el.textContent=el.id==='sAll'?'全患者データを消去':'このスロットの点を消去'}},3000);return}fn()}};
   two($('sClr'),()=>{pushHist(sl.id,Object.keys(sl.pts));sl.pts={};save();renderAll();closeModal();toast('点を消去しました（元に戻せます）')});
   $('sDemo').onclick=async()=>{createDemo();closeModal();await openStudy('demo-pre');toast('デモ症例を作り直しました')};
@@ -1017,9 +1035,10 @@ function buildDemoSag(o={}){
   const I=q=>({x:(q.x-minx)*k,y:(maxy-q.y)*k});
   const cv2=document.createElement('canvas');cv2.width=Math.round((maxx-minx)*k);cv2.height=Math.round((maxy-miny)*k);const x=cv2.getContext('2d');
   const g=x.createLinearGradient(0,0,cv2.width,0);g.addColorStop(0,'#0b0d0f');g.addColorStop(.5,'#16191c');g.addColorStop(1,'#0b0d0f');x.fillStyle=g;x.fillRect(0,0,cv2.width,cv2.height);
-  const poly=(pts,fill,stroke,lw)=>{x.beginPath();pts.forEach((q,i)=>{const s=I(q);i?x.lineTo(s.x,s.y):x.moveTo(s.x,s.y)});x.closePath();if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
-  const circ=(q,r,fill,stroke,lw)=>{const s=I(q);x.beginPath();x.arc(s.x,s.y,r*k,0,7);if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
-  const line=(a,b,col,lw)=>{const A=I(a),B=I(b);x.strokeStyle=col;x.lineWidth=lw*k;x.lineCap='round';x.beginPath();x.moveTo(A.x,A.y);x.lineTo(B.x,B.y);x.stroke()};
+  const SH=[];
+  const poly=(pts,fill,stroke,lw)=>{SH.push({t:'p',p:pts.map(I),f:fill,s:stroke,a:x.globalAlpha});x.beginPath();pts.forEach((q,i)=>{const s=I(q);i?x.lineTo(s.x,s.y):x.moveTo(s.x,s.y)});x.closePath();if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
+  const circ=(q,r,fill,stroke,lw)=>{const s=I(q);SH.push({t:'c',c:s,r:r*k,f:fill,s:stroke,a:x.globalAlpha});x.beginPath();x.arc(s.x,s.y,r*k,0,7);if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
+  const line=(a,b,col,lw)=>{const A=I(a),B=I(b);SH.push({t:'l',a:A,b:B,w:lw*k,s:col,o:x.globalAlpha});x.strokeStyle=col;x.lineWidth=lw*k;x.lineCap='round';x.beginPath();x.moveTo(A.x,A.y);x.lineTo(B.x,B.y);x.stroke()};
   // soft tissue
   x.globalAlpha=.5;circ(cran,95,'#2a2e33');x.globalAlpha=1;circ(cran,95,null,'#8d939a',6);
   // pelvis & femur
@@ -1054,7 +1073,8 @@ function buildDemoSag(o={}){
   const pts={},put=(key,arr)=>{if(LM[key])pts[key]=arr.map(I)};
   for(const kk in F){if(LM[kk]&&!DER[kk])put(kk,F[kk])}
   for(const kk in X)put(kk,[X[kk]]);put('Hip',Hp);
-  return{canvas:cv2,pts,mmpp:1/k}}
+  const ALL={};for(const kk in F)ALL[kk]=F[kk].map(I);
+  return{canvas:cv2,pts,mmpp:1/k,shapes:SH,all:ALL}}
 function buildDemoCor(o={}){
   const LV=['S1','L5','L4','L3','L2','L1','T12','T11','T10','T9','T8','T7','T6','T5','T4','T3','T2','T1','C7'];
   const dim=n=>{const t=n[0],kk=+n.slice(1);if(t==='S')return{w:52,h:0,d:0};if(t==='L')return{w:50,h:27,d:10};if(t==='T')return{w:30+(kk-1)*1.2,h:17+(kk-1)*.55,d:5};return{w:24,h:13.5,d:5}};
@@ -1081,14 +1101,15 @@ function buildDemoCor(o={}){
   const I=q=>({x:(maxx-q.x)*k,y:(maxy-q.y)*k}); // image left = patient right
   const cv2=document.createElement('canvas');cv2.width=Math.round((maxx-minx)*k);cv2.height=Math.round((maxy-miny)*k);const x=cv2.getContext('2d');
   const g=x.createRadialGradient(cv2.width/2,cv2.height*.45,50,cv2.width/2,cv2.height*.45,cv2.width);g.addColorStop(0,'#1a1d20');g.addColorStop(1,'#08090a');x.fillStyle=g;x.fillRect(0,0,cv2.width,cv2.height);
-  const poly=(pts,fill,stroke,lw)=>{x.beginPath();pts.forEach((q,i)=>{const s=I(q);i?x.lineTo(s.x,s.y):x.moveTo(s.x,s.y)});x.closePath();if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
-  const circ=(q,r,fill,stroke,lw)=>{const s=I(q);x.beginPath();x.arc(s.x,s.y,r*k,0,7);if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
-  const line=(a,b,col,lw)=>{const A=I(a),B=I(b);x.strokeStyle=col;x.lineWidth=lw*k;x.lineCap='round';x.beginPath();x.moveTo(A.x,A.y);x.lineTo(B.x,B.y);x.stroke()};
+  const SH=[];
+  const poly=(pts,fill,stroke,lw)=>{SH.push({t:'p',p:pts.map(I),f:fill,s:stroke,a:x.globalAlpha});x.beginPath();pts.forEach((q,i)=>{const s=I(q);i?x.lineTo(s.x,s.y):x.moveTo(s.x,s.y)});x.closePath();if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
+  const circ=(q,r,fill,stroke,lw)=>{const s=I(q);SH.push({t:'c',c:s,r:r*k,f:fill,s:stroke,a:x.globalAlpha});x.beginPath();x.arc(s.x,s.y,r*k,0,7);if(fill){x.fillStyle=fill;x.fill()}if(stroke){x.strokeStyle=stroke;x.lineWidth=lw||2;x.stroke()}};
+  const line=(a,b,col,lw)=>{const A=I(a),B=I(b);SH.push({t:'l',a:A,b:B,w:lw*k,s:col,o:x.globalAlpha});x.strokeStyle=col;x.lineWidth=lw*k;x.lineCap='round';x.beginPath();x.moveTo(A.x,A.y);x.lineTo(B.x,B.y);x.stroke()};
   // torso soft tissue
   x.globalAlpha=.35;poly([{x:175,y:yT1+20},{x:150,y:Y.L1.sup},{x:140,y:-40},{x:-140,y:-40},{x:-150,y:Y.L1.sup},{x:-175,y:yT1+20}],'#2d3237');x.globalAlpha=1;
   // ribs
   x.globalAlpha=.55;['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10'].forEach((n,i)=>{const c=cen(n);[1,-1].forEach(sg=>{const A=I(add(c,{x:sg*18,y:0})),B=I(add(c,{x:sg*(110+i*4),y:-10-i*2})),C=I(add(c,{x:sg*(125+i*3),y:-60-i*3}));
-    x.strokeStyle='#8a9197';x.lineWidth=4;x.beginPath();x.moveTo(A.x,A.y);x.quadraticCurveTo(B.x,B.y,C.x,C.y);x.stroke()})});x.globalAlpha=1;
+    SH.push({t:'q',a:A,b:B,c:C,s:'#8a9197',o:.55});x.strokeStyle='#8a9197';x.lineWidth=4;x.beginPath();x.moveTo(A.x,A.y);x.quadraticCurveTo(B.x,B.y,C.x,C.y);x.stroke()})});x.globalAlpha=1;
   // clavicles
   line({x:14,y:yT1-2},X.AP_clavR,'#b6bcc2',8);line({x:-14,y:yT1-4},X.AP_clavL,'#b6bcc2',8);
   // pelvis
@@ -1098,12 +1119,13 @@ function buildDemoCor(o={}){
   // vertebrae
   LV.slice(1).forEach(nm=>{const v=V[nm];poly([v.sup.A,v.sup.P,v.inf.P,v.inf.A],'#b9bfc5','#e5e8eb',2.2);
     const c=mid(v.sup.c,v.inf.c),e=dr_((v.sup.t+v.inf.t)/2),hh=Math.max(4,(Y[nm].sup-Y[nm].inf)*.22);
-    [1,-1].forEach(sg=>{const pc=add(c,mul(e,sg*v.w*(nm==='T8'?(sg>0?.25:.38):.32)));const s=I(pc);x.beginPath();x.ellipse(s.x,s.y,v.w*.09*k,hh*k,0,0,7);x.strokeStyle='#eef0f2';x.lineWidth=2.4;x.stroke()});
+    [1,-1].forEach(sg=>{const pc=add(c,mul(e,sg*v.w*(nm==='T8'?(sg>0?.25:.38):.32)));const s=I(pc);SH.push({t:'e',c:s,rx:v.w*.09*k,ry:hh*k,s:'#eef0f2'});x.beginPath();x.ellipse(s.x,s.y,v.w*.09*k,hh*k,0,0,7);x.strokeStyle='#eef0f2';x.lineWidth=2.4;x.stroke()});
     const s=I(c);x.beginPath();x.ellipse(s.x,s.y+hh*k*.6,2.5*k,hh*k*.9,0,0,7);x.fillStyle='#d5d9dd';x.fill()});
   addNoise(cv2,14);
   x.fillStyle='rgba(241,210,100,.9)';x.font='600 21px system-ui,sans-serif';x.fillText('DEMO シェーマ（実画像ではありません）',16,34);x.fillStyle='#e4eaef';x.font='600 28px system-ui,sans-serif';x.fillText('R',22,76);
   const pts={};for(const kk in X)pts[kk]=[I(X[kk])];for(const kk in L)pts[kk]=[I(L[kk].A),I(L[kk].P)];
-  return{canvas:cv2,pts,mmpp:1/k}}
+  const ALL={};for(const nm in V){ALL[nm+'sup']=[I(V[nm].sup.A),I(V[nm].sup.P)];if(V[nm].inf)ALL[nm+'inf']=[I(V[nm].inf.A),I(V[nm].inf.P)]}
+  return{canvas:cv2,pts,mmpp:1/k,shapes:SH,all:ALL}}
 
 /* ================= patients · studies · trend ================= */
 const TPL=['初診','術前','術直後','術後1週','術後1か月','術後3か月','術後6か月','術後1年','術後2年','術後5年','最終観察','経過観察'];
@@ -1233,6 +1255,135 @@ const idx=await idbGet('index');
   const u=await idbGet('ui')||{};st.age=u.age||'';
   const sid=(u.sid&&DBI.studies.find(x=>x.id===u.sid))?u.sid:(DBI.studies.find(x=>x.id==='demo-pre')||DBI.studies[0]||{}).id;
   if(sid)await openStudy(sid,{noSave:true});else renderAll()}
+
+
+/* ================= landmark guide (位置の見本) ================= */
+const GB='#c3ccd4',GL='#e3e9ee',GD='#7c8893';
+const FIG={
+ cvj:{vb:[0,30,400,320],cap:'頭蓋頚椎移行部 側面（右が前方）',svg:`
+<path d="M372,96 C382,40 300,22 230,24 C140,26 52,70 32,150 C28,178 52,204 80,215" fill="none" stroke="${GD}" stroke-width="5"/>
+<path d="M370,99 L300,108 L256,120" fill="none" stroke="${GB}" stroke-width="4" stroke-linecap="round"/>
+<path d="M256,120 C253,143 232,149 227,130 L224,114" fill="none" stroke="${GL}" stroke-width="3.5" stroke-linecap="round"/>
+<path d="M224,114 L244,138 L206,213 L192,206 Z" fill="${GB}" fill-opacity=".55" stroke="${GL}" stroke-width="2"/>
+<path d="M112,202 C100,212 90,218 80,216 C58,212 40,190 32,160 L46,152 C58,176 82,194 112,202 Z" fill="${GB}" fill-opacity=".55" stroke="${GL}" stroke-width="2"/>
+<ellipse cx="140" cy="186" rx="20" ry="25" fill="${GL}" opacity=".16"/>
+<path d="M302,211 L394,212 L394,221 L304,219 Z" fill="${GB}" stroke="${GL}" stroke-width="1.5"/>
+<path d="M300,218 C286,230 276,242 270,256" fill="none" stroke="${GD}" stroke-width="7" stroke-linecap="round" opacity=".55"/>
+<g fill="${GB}" opacity=".45"><rect x="318" y="223" width="12" height="18" rx="4"/><rect x="334" y="223" width="12" height="18" rx="4"/><rect x="350" y="223" width="12" height="18" rx="4"/><rect x="366" y="223" width="12" height="18" rx="4"/></g>
+<path d="M298,252 L289,300 C297,320 340,323 398,321" fill="none" stroke="${GD}" stroke-width="5" opacity=".5"/>
+<rect x="160" y="228" width="44" height="22" rx="6" fill="${GL}" opacity=".13"/>
+<path d="M174,236 C175,226 180,219 187,218 C194,219 199,226 199,236 L201,255 L214,300 L170,303 L172,256 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<path d="M172,262 L150,256 L112,266 L86,286 L94,298 L124,292 L150,298 L171,296 Z" fill="${GD}" fill-opacity=".7" stroke="${GB}" stroke-width="1.5"/>
+<ellipse cx="158" cy="272" rx="7" ry="9" fill="none" stroke="#f4f7f9" stroke-width="2.5"/>
+<ellipse cx="212" cy="240" rx="7" ry="12" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<ellipse cx="120" cy="238" rx="13" ry="8" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<path d="M168,313 L214,310 L217,346 L168,349 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<path d="M190,198 C178,215 168,232 168,250 C168,270 165,292 163,340" fill="none" stroke="#7fb7d8" stroke-width="2" stroke-dasharray="5 4"/>
+<g font-size="10" fill="#93a1ad" font-family="system-ui,sans-serif">
+<text x="330" y="206">硬口蓋</text><text x="262" y="100">トルコ鞍</text><text x="236" y="182">斜台</text><text x="30" y="226">後頭骨</text>
+<text x="104" y="160">乳様突起（重なる）</text><text x="140" y="214">大後頭孔</text><text x="222" y="262">C1前弓</text><text x="96" y="228">C1後弓</text>
+<text x="180" y="292">C2</text><text x="184" y="334">C3</text><text x="110" y="318">硬膜（MRI）</text><text x="300" y="250">軟口蓋</text></g>`},
+ face:{vb:[0,0,200,240],cap:'頭部 側面（臨床写真・全身側面像）',svg:`
+<path d="M60,18 C110,6 150,22 156,54 C158,62 152,68 152,72 C160,92 172,110 168,118 C164,124 160,126 162,132 C164,140 158,146 158,152 C160,162 156,170 150,176 C148,186 148,196 138,202 C120,208 104,200 98,214 L96,240" fill="none" stroke="${GB}" stroke-width="3"/>
+<path d="M60,18 C20,30 10,90 30,140 C40,160 60,176 64,200 L66,240" fill="none" stroke="${GB}" stroke-width="3"/>
+<path d="M120,70 q10,-6 20,0" fill="none" stroke="${GD}" stroke-width="3"/>`},
+ fx:{vb:[0,10,250,200],cap:'骨折椎と隣接椎 側面（右が前方）',svg:`
+<path d="M82,30 L168,26 L170,70 L84,74 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<path d="M84,88 L170,100 L172,128 L86,132 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<path d="M86,146 L172,142 L174,186 L88,190 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<g fill="${GD}" opacity=".8"><path d="M84,40 L40,46 L30,60 L84,62Z"/><path d="M86,98 L42,104 L32,118 L86,122Z"/><path d="M88,156 L44,162 L34,176 L88,178Z"/></g>
+<g font-size="10" fill="#93a1ad" font-family="system-ui,sans-serif"><text x="178" y="52">上位隣接椎</text><text x="180" y="118">骨折椎</text><text x="182" y="170">下位隣接椎</text></g>`}
+};
+const FIGP={
+ cvj:{PNS:[[300,215]],Opis:[[112,202]],Basion:[[192,206]],OccLow:[[81,216]],ClivSup:[[224,114]],TubS:[[255,121]],Nasion:[[372,96]],
+  DensTip:[[187,218]],DensA:[[199,240]],DensP:[[174,240]],C1A:[[212,240]],C1P:[[120,238]],C1aP:[[205,240]],C1pA:[[133,238]],C2ped:[[158,272]],
+  C2pwS:[[173,256]],C2pwI:[[170,303]],C2infMid:[[192,301.5]],C2c:[[189,280]],DuraV:[[168,247]],C2cm:[[156,286]],C2inf:[[214,300],[170,303]]},
+ face:{Brow:[[156,60]],Chin:[[142,198]]},
+ fx:{FX_U:[[168,26],[82,30]],FX_L:[[174,186],[88,190]],FX_sup:[[170,100],[84,88]],FX_inf:[[172,128],[86,132]]}};
+const GALIAS={UIVinf:'T10inf',UIV2sup:'T8sup',AP_ptU:'T2sup',AP_ptL:'T5inf'};
+function gLoc(k){for(const f in FIGP)if(FIGP[f][k])return{fig:f,p:FIGP[f][k]};
+  if(/^(FR_|_cal)/.test(k))return null;
+  if(k.startsWith('AP_')){const d=demoFor('pre','ap');if(!d)return null;const a=d.pts[k]||d.all[GALIAS[k]];return a?{fig:'ap',p:a.map(q=>[q.x,q.y]),alias:GALIAS[k]?GALIAS[k].replace(/(sup|inf)$/,''):null}:null}
+  const d=demoFor('pre','lat');if(!d)return null;const src=GALIAS[k]||k;
+  let a=d.pts[src]||d.all[src];if(!a){const g=getPts({pts:d.pts},src);a=g}
+  return a?{fig:'sag',p:a.map(q=>[q.x,q.y]),alias:GALIAS[k]?src.replace(/(sup|inf)$/,''):null}:null}
+function shapesSVG(sh){return sh.map(o=>{const op=o.a!=null&&o.a<1?` opacity="${o.a}"`:'';
+  if(o.t==='p')return`<polygon points="${o.p.map(q=>q.x.toFixed(1)+','+q.y.toFixed(1)).join(' ')}" fill="${o.f||'none'}" stroke="${o.s||'none'}" stroke-width="2"${op}/>`;
+  if(o.t==='c')return`<circle cx="${o.c.x.toFixed(1)}" cy="${o.c.y.toFixed(1)}" r="${o.r.toFixed(1)}" fill="${o.f||'none'}" stroke="${o.s||'none'}" stroke-width="3"${op}/>`;
+  if(o.t==='l')return`<line x1="${o.a.x.toFixed(1)}" y1="${o.a.y.toFixed(1)}" x2="${o.b.x.toFixed(1)}" y2="${o.b.y.toFixed(1)}" stroke="${o.s}" stroke-width="${o.w.toFixed(1)}" stroke-linecap="round"${o.o!=null&&o.o<1?` opacity="${o.o}"`:''}/>`;
+  if(o.t==='e')return`<ellipse cx="${o.c.x.toFixed(1)}" cy="${o.c.y.toFixed(1)}" rx="${o.rx.toFixed(1)}" ry="${o.ry.toFixed(1)}" fill="none" stroke="${o.s}" stroke-width="2.4"/>`;
+  if(o.t==='q')return`<path d="M${o.a.x},${o.a.y} Q${o.b.x},${o.b.y} ${o.c.x},${o.c.y}" fill="none" stroke="${o.s}" stroke-width="4" opacity="${o.o}"/>`;return''}).join('')}
+const RM=(()=>{try{return matchMedia('(prefers-reduced-motion: reduce)').matches}catch(e){return false}})();
+/* items: [{k,loc,act}] act = sub-index being placed (-1 = none, show all labelled) */
+function gSVG(items,mode){const fig=items[0].loc.fig;let base,full;
+  if(FIG[fig]){base=FIG[fig].svg;full=FIG[fig].vb}else{const d=demoFor('pre',fig==='ap'?'ap':'lat');base=shapesSVG(d.shapes);full=[0,0,d.canvas.width,d.canvas.height]}
+  const mmk=FIG[fig]?2.3:2.6,pts=items.flatMap(it=>it.loc.p);
+  const xs=pts.map(q=>q[0]),ys=pts.map(q=>q[1]),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,bw=Math.max(...xs)-Math.min(...xs),bh=Math.max(...ys)-Math.min(...ys);
+  let vb;
+  if(mode==='thumb'){const sz=FIG[fig]?Math.max(150,Math.max(bw,bh)+70):Math.max(80*mmk,Math.max(bw,bh)+40*mmk);vb=[cx-sz/2,cy-sz/2,sz,sz]}
+  else if(FIG[fig])vb=full;
+  else{const h=Math.max(150*mmk,bh+70*mmk),w=Math.max(150*mmk,bw+70*mmk,h/1.25);vb=[cx-w/2,cy-h/2,w,h]}
+  const W=Math.max(vb[2],vb[3]),r=W*(mode==='thumb'?.045:.02),fs=W*(items.length>1?.028:.034),sw=W*(mode==='thumb'?.012:.005);
+  let ov='';
+  items.forEach(it=>{const d=LM[it.k],P=it.loc.p,many=items.length>1;
+    if(P.length===2)ov+=`<line x1="${P[0][0]}" y1="${P[0][1]}" x2="${P[1][0]}" y2="${P[1][1]}" stroke="#5cc8f5" stroke-width="${sw}" stroke-dasharray="${sw*3} ${sw*2}"/>`;
+    P.forEach((q,i)=>{const on=it.act===i||(it.act<0&&!many)||(it.act==null);const col=on?'#5cc8f5':'#f1d264';
+      ov+=`<circle cx="${q[0]}" cy="${q[1]}" r="${r*.45}" fill="${col}"/>`;
+      if(on&&mode==='thumb'||it.act===i)ov+=`<circle cx="${q[0]}" cy="${q[1]}" r="${r}" fill="none" stroke="#5cc8f5" stroke-width="${sw}">${RM?'':`<animate attributeName="r" values="${r};${r*1.7};${r}" dur="1.6s" repeatCount="indefinite"/>`}</circle>`;
+      if(mode!=='thumb'){const sub=P.length===2?(d.subs[i]||''):'';const t=many?(i===0?d.name:''):(sub||d.name);
+        const lf=q[0]>vb[0]+vb[2]*.55;if(t)ov+=`<text x="${lf?q[0]-r*1.2:q[0]+r*1.2}" y="${q[1]-r*1.2}" text-anchor="${lf?'end':'start'}" font-size="${fs}" fill="${col}" stroke="#05070a" stroke-width="${fs*.28}" paint-order="stroke" font-family="system-ui,sans-serif" font-weight="600">${esc(t)}</text>`}})});
+  return`<svg viewBox="${vb.map(v=>v.toFixed(1)).join(' ')}" xmlns="http://www.w3.org/2000/svg"><rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}" fill="#0a0d10"/>${base}${ov}</svg>`}
+const EPTIP='骨棘は含めず、終板の皮質がつくる角（前上角・後上角など）を取ります。終板が二重に見えるとき（斜位）は2本の中間を取ります。';
+const GTIP={
+ PNS:'硬口蓋（上顎骨口蓋突起と口蓋骨水平板がつくる水平な骨板）の最後端です。上下の皮質線が後方で合流する先端を取ります。軟口蓋の軟部陰影はここから後下方へ続きます。上顎大臼歯や翼状突起と重なるため、硬口蓋の上縁を前方からたどると見つけやすくなります。',
+ Opis:'大後頭孔の後縁の正中点です。後頭骨の下面（内板）を後方から前方へたどり、骨が途切れて孔になる先端を取ります。C1 後弓のほぼ真上にあります。乳様突起と重なって見えにくいときは、CT 正中矢状断で確認してください。',
+ Basion:'大後頭孔の前縁の正中点で、斜台の下端です。斜台後面の皮質線を下方へたどった先端を取ります。成人では歯突起先端の上方 約 4–6 mm にあります。',
+ OccLow:'後頭鱗の正中で最も低い点（外板の最下点）です。オピスチオンのやや後方にあり、McGregor 線の後端になります。',
+ ClivSup:'斜台後面の上端で、鞍背（トルコ鞍の後壁）の頂部です。斜台の後面を上方へたどって取ります。',
+ TubS:'トルコ鞍の前壁の上端（鞍結節）です。前床突起と重なるため、鞍底から前方へ立ち上がる皮質線をたどります。',
+ Nasion:'前頭骨と鼻骨の縫合部の最前点で、鼻根部の骨表面が最も陥凹する点です。',
+ DensTip:'歯突起の頂点です。不明瞭なときは、歯突起の前面と後面の皮質線を上方へ延長して交わる点を取ります。',
+ DensA:'C1 前弓の中央の高さで、歯突起の前面皮質を取ります（ADI の後端）。',DensP:'C1 前弓の中央の高さで、歯突起の後面皮質を取ります（SAC の前端）。',
+ C1A:'C1 前弓（楕円形の骨陰影）の中心です。',C1P:'C1 後弓の骨陰影の中心です。',
+ C1aP:'C1 前弓の後面（歯突起に面する側）の皮質で、前弓の高さの中央を取ります（ADI の前端）。',
+ C1pA:'C1 後弓の前面（脊柱管側）の皮質です。各椎弓の前縁を結ぶ spinolaminar line 上にあります。',
+ C2ped:'C2 椎弓根を示す楕円形の硬化輪（sclerotic ring）の中心です。歯突起基部の後下方に見えます。',
+ C2pwS:'C2 椎体後壁の上端（歯突起基部の後面）です。C2 後壁の接線上の上の点として取ります。',C2pwI:'C2 椎体の後下角です。',
+ C2infMid:'C2 下終板の前後径の中点です。',C2c:'歯突起を除いた C2 椎体の中心（対角線の交点の目安）です。',
+ DuraV:'MRI T2 強調矢状断で、歯突起後方の硬膜腹側が最も後方へ張り出す点です（単純 X 線では評価できません）。',
+ C2cm:'C2 椎体後縁と spinolaminar line（椎弓前縁）の中点です。',C7cm:'C7 椎体後縁と spinolaminar line の中点です。',
+ C2inf:'C2 下終板です。'+EPTIP,S1sup:'仙骨上縁（S1 上終板）です。前縁は岬角（S1 椎体の前上角）、後縁は S1 椎体の後上角です。腰仙移行椎がある場合は椎体の数え方に注意してください。',
+ S1pwI:'S1 椎体後壁の下端（S1/S2 境界）です。',
+ Hip:'大腿骨頭の中心です。骨頭の輪郭に合う円をイメージしてその中心を取ります。左右の骨頭がずれて見えるときは両方を取り、中点を使います。',
+ Stern:'胸骨柄の上縁（頚切痕）の最上点です。鎖骨・肩と重なる場合は、胸骨柄の前後の皮質を上方へたどります。',
+ Brow:'眉間（眉の高さ）の皮膚表面の最前点です。全身側面写真または全身側面 X 線の軟部陰影で取ります。',Chin:'オトガイの皮膚表面の最前点です。',
+ OPLLp:'骨化巣が脊柱管内へ最も後方に突出する点です。CT 矢状断が確実です。',VBpw:'骨化巣が付着する高さの椎体後縁です。',SLp:'同じ高さの脊柱管後壁（椎弓の前縁）です。',
+ TP_VBa:'測定椎（通常 C5）の椎体前縁の中点です。',TP_VBp:'同じ椎体の後縁の中点です。',TP_SL:'同じ高さの spinolaminar line（椎弓前縁）上の点です。',
+ UIVinf:'最上位固定椎（UIV）の下終板です。図は UIV＝T10 の例です。'+EPTIP,UIV2sup:'UIV の2椎上位の上終板です。図は UIV＝T10（UIV+2＝T8）の例です。'+EPTIP,
+ FX_U:'骨折椎の1つ上の椎体の上終板です。',FX_L:'骨折椎の1つ下の椎体の下終板です。',FX_sup:'骨折椎の上終板です。陥凹がある場合は前縁と後縁の角を結びます。',FX_inf:'骨折椎の下終板です。',
+ AP_C7c:'C7 椎体の中心（左右の椎弓根の中点の高さで椎体の中央）です。',AP_S1c:'仙骨上縁の中点です。ここを通る鉛直線が CSVL になります。',
+ AP_apexT:'胸椎カーブで最も側方へ偏位・回旋した椎体（頂椎）の中心です。',AP_apexL:'腰椎カーブの頂椎の中心です。',
+ AP_clavR:'右鎖骨の最も高い点です。',AP_clavL:'左鎖骨の最も高い点です。',AP_shR:'右肩鎖関節の直上にある軟部陰影の最高点です。',AP_shL:'左肩鎖関節の直上にある軟部陰影の最高点です。',
+ AP_icR:'右腸骨稜の最も高い点です。',AP_icL:'左腸骨稜の最も高い点です。',AP_fhR:'右大腿骨頭の最も高い点です。',AP_fhL:'左大腿骨頭の最も高い点です。',
+ AP_vCx:'頂椎の凸側の椎体外側縁です（椎弓根の高さ）。',AP_vCc:'頂椎の凹側の椎体外側縁です。',AP_ped:'頂椎の凸側椎弓根の中心です。',
+ AP_laPm:'腰椎頂椎の凹側椎弓根の内側縁です。',AP_laE:'腰椎頂椎の凹側の椎体外側縁です。',
+ _cal:'長さが分かっている2点（定規の目盛り、較正球の直径、長さの分かるインプラントなど）をタップします。',
+};
+function gTip(k){const d=LM[k];if(GTIP[k])return GTIP[k];
+  if(/^AP_/.test(k)&&d.type==='ln')return'Cobb 法の終椎（カーブの上下で水平に対し最も傾いた椎体）の終板です。左右両端の角を取ります。';
+  if(d.type==='ln'&&/(sup|inf)$/.test(k))return EPTIP;
+  if(/c$/.test(k))return'椎体の中心です。上下終板の4隅の中央（対角線の交点）を目安にします。';
+  if(/pi$|pw[SI]$/.test(k))return'椎体後壁の角（後上角または後下角）を取ります。骨棘は含めません。';
+  return d.hint||''}
+function openGuide(keys,curK,curI,param){const seen=[];keys.forEach(k=>{if(!seen.includes(k))seen.push(k)});
+  const groups={},order=[],none=[];seen.forEach(k=>{const loc=gLoc(k);if(!loc){none.push(k);return}const f=loc.fig;if(!groups[f]){groups[f]=[];order.push(f)}groups[f].push({k,loc,act:k===curK?curI:-1})});
+  const capOf=f=>FIG[f]?FIG[f].cap:f==='ap'?'全脊椎 正面像のシェーマ（画像の左が患者の右）':'全脊椎 側面像のシェーマ（右が前方）';
+  const figs=order.map(f=>`<div class="gfig">${gSVG(groups[f],'full')}<div class="cap">${esc(capOf(f))}${groups[f].some(i=>i.loc.alias)?' · 例として '+esc(groups[f].find(i=>i.loc.alias).loc.alias)+' に表示':''}</div></div>`).join('');
+  const list=seen.map(k=>{const d=LM[k];return`<div class="${k===curK?'on':''}"><b>${esc(d.name)}</b>${d.type!=='pt'?' <span class="small">（'+esc(d.subs.join(' → '))+'）</span>':''}<p>${esc(gTip(k))}</p></div>`}).join('');
+  openModal(`<div class="mh"><h2>${esc(param?param.n+' の測定点':'この点の位置')}</h2><button class="btn sm ghost" data-x>閉じる</button></div>
+   ${figs||'<p class="small">この点には見本図がありません。</p>'}
+   <div class="glist">${list}</div>
+   <p class="small">見本はシェーマです。実際の画像では個人差・撮影条件による違いがあるため、周囲の構造と合わせて確認してください。</p>`)}
 
 /* ================= boot ================= */
 (function check(){P.forEach(p=>p.lm.forEach(k=>{if(!LM[k])console.error('missing landmark',p.id,k)}))})();
