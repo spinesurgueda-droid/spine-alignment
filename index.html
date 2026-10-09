@@ -85,6 +85,13 @@ button{cursor:pointer}
 .glist div.on{border-left-color:var(--acc)}
 .glist b{font-size:13.5px;font-weight:600}
 .glist p{margin:3px 0 0;font-size:12.5px;line-height:1.65;color:var(--mut)}
+.lrn{display:flex;flex-direction:column;gap:8px}
+.lrn .mean{color:var(--fg);font-size:13px;line-height:1.7}
+.lrn h4{margin:4px 0 0;font-size:11.5px;font-weight:600;color:var(--acc);letter-spacing:.06em}
+.lfig svg{max-height:320px}
+.lrn ol{margin:0;padding-left:1.4em;font-size:12.5px;line-height:1.7;color:var(--mut)}
+.lrn ol b{color:var(--fg);font-weight:500}
+.lrn details summary{cursor:pointer;font-size:12.5px;color:var(--acc)}
 #empty{position:absolute;inset:0;display:grid;place-items:center;padding:24px}
 #empty .card{max-width:340px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;color:var(--mut);line-height:1.6}
 #empty .card strong{color:var(--fg);font-size:16px;font-weight:600}
@@ -793,7 +800,7 @@ function renderBody(){const b=$('sbody'),reg=REG.find(r=>r.id===st.region);
   if(p){const r=compute(p,sl),need=missing(p,sl);
     h+=`<div class="det"><div class="dt"><div><h3>${esc(p.n)}</h3><div class="en">${esc(p.en)}</div></div>${r?`<div class="big">${esc(fmtV(r))}<small>${esc(r.u==='点'?'点':unitTxt(r))}</small></div>`:''}</div>
     ${r?`<div class="fl">${r.s?`<span class="pill ${r.s}">${esc(r.st||STX[r.s])}</span>`:r.st?`<span class="pill na">${esc(r.st)}</span>`:''}${r.t?`<span class="note">${esc(r.t)}</span>`:''}</div>`:`<p class="note">あと ${need} 点の入力で計算します。</p>`}
-    <p>${esc(p.ref)}</p>
+    ${learnHTML(p)}
     <div class="acts">${r?`<button class="btn sm" data-a="legend">点の位置（凡例）</button><button class="btn sm" data-a="zoom">この部位を拡大</button><button class="btn sm" data-a="redo">点を消して再測定</button>`:`<button class="btn sm pri" data-a="meas">測定を始める</button><button class="btn sm" data-a="legend">点の位置（凡例）</button>`}<button class="btn sm ghost" data-a="close">閉じる</button></div></div>`}
   const lab=reg.v==='c'?'正面像':reg.v==='f'?'任意':'側面像';
   h+=`<div class="rhead"><span>${esc(reg.d)} · ${esc(SLOTS.find(s=>s.id===st.slot).name)}スロットで計算</span><button class="btn sm" data-a="all">まとめて測定</button></div>`;
@@ -820,7 +827,7 @@ $('slots').addEventListener('click',e=>{const b=e.target.closest('button[data-s]
 $('regions').addEventListener('click',e=>{if(e.target.closest('[data-tr]')){openTrend();return}const b=e.target.closest('button[data-r]');if(b){if(st.mode==='measure')stopMeasure();setRegion(b.dataset.r);if(st.sheet==='min')setSheet('mid')}});
 $('sbody').addEventListener('click',e=>{if(setsClick(e))return;const t=e.target.closest('[data-p],[data-a],[data-s2]');if(!t)return;
   if(t.dataset.s2){setSlot(t.dataset.s2);if(st.region==='dyn')setRegion('cx');return}
-  if(t.dataset.p){const p=PID[t.dataset.p],sl=cur();st.sel=p.id;if(!compute(p,sl)&&sl.base){startMeasure([p.id])}else renderAll();return}
+  if(t.dataset.p){st.sel=t.dataset.p;if(st.sheet==='min')setSheet('mid');renderAll();$('sbody').scrollTop=0;return}
   const a=t.dataset.a,p=selParam();
   if(a==='close'){st.sel=null;renderAll()}
   else if(a==='meas'&&p)startMeasure([p.id]);
@@ -1131,6 +1138,121 @@ function buildDemoCor(o={}){
   return{canvas:cv2,pts,mmpp:1/k,shapes:SH,all:ALL}}
 
 
+
+/* ================= parameter learning (意味・作図・計測点) ================= */
+const PMEAN={
+ chamb:'頭蓋底陥入（歯突起が頭蓋内へ突き上がる状態）のスクリーニングです。硬口蓋後端と大後頭孔後縁を結ぶ線に対して、歯突起先端がどれだけ上にあるかをみます。',
+ mcg:'Chamberlain 線の変法です。見えにくいオピスチオンの代わりに後頭骨の最下点を使うため再現性が高く、RA の垂直亜脱臼の評価で広く使われます。',
+ mcrae:'大後頭孔の入口を表す線です。歯突起が大後頭孔の中へ入り込んでいないかを直接評価します。',
+ wack:'斜台の後面を下へ延ばした線です。歯突起がこの線より後方に出ると、延髄を前方から圧迫している可能性があります。',
+ boog:'斜台と大後頭孔面のなす角です。頭蓋底陥入で大きくなります。',
+ cxa:'斜台と軸椎後壁のなす角で、延髄・脳幹が前方でどれだけ折れ曲がっているかを表します。Chiari 奇形・頭蓋底陥入の評価や、後頭頚椎固定の角度設定に使います。',
+ basal:'頭蓋底の折れ曲がりの程度です。角度が大きい（頭蓋底が平ら）と扁平頭蓋底です。',
+ ranawat:'環椎に対する軸椎の高さです。RA で環椎が軸椎に沈み込む（垂直亜脱臼）と小さくなります。',
+ redlund:'頭蓋底（McGregor 線）と C2 下縁の距離です。RA の垂直亜脱臼で短くなります。',
+ adi:'環椎前弓と歯突起の間隙で、横靱帯の機能不全（環軸椎前方亜脱臼）の指標です。前屈位で最大になります。',
+ padi:'歯突起の後ろに残る脊柱管の余裕（有効脊柱管前後径）です。ADI より神経症状や麻痺のリスクとよく相関します。',
+ powers:'環椎後頭関節の前方脱臼（外傷）の指標です。',
+ bdi:'バジオンと歯突起先端の距離で、環椎後頭関節の縦方向の脱臼（外傷）の指標です。',
+ bai:'バジオンと C2 後壁延長線の前後の位置関係で、環椎後頭関節の前後方向の脱臼の指標です。',
+ oc2:'後頭骨と軸椎の相対的な角度です。後頭頚椎固定でこの角度を小さく固定すると咽頭腔が狭くなり、嚥下障害や呼吸困難の原因になります。',
+ c12:'環椎と軸椎の間の角度です。環軸椎固定の固定角の参考にします。',
+ grabb:'歯突起後方での腹側からの圧迫の程度です。Chiari I 奇形で腹側減圧の必要性を判断する材料になります。',
+ c27:'頚椎全体の前弯の大きさです。後弯は後方除圧後の成績不良や後弯進行と関連します。',
+ c27h:'C2 と C7 の椎体後壁の接線で測る頚椎前弯です。終板の形の影響を受けにくい方法です。',
+ c2s:'C2 の傾きです。T1 slope と組み合わせて頚椎前弯の配分を考えます。',
+ t1s:'頚椎の土台（T1）の傾きです。大きいほど、前を向く（水平視）ために大きな頚椎前弯が必要になります。',
+ tscl:'土台の傾き（T1 slope）に対して頚椎前弯が足りているかを表します。大きいほど前弯が不足しています。',
+ csva:'頭部（C2）が C7 に対してどれだけ前方にあるかで、頚椎の前方偏位の大きさです。HRQOL と相関します。',
+ tia:'胸郭入口の形態を表す角で、個人ごとにほぼ一定です（= T1 slope + Neck tilt）。適切な T1 slope の目安になります。',
+ nt:'胸郭入口での頚部の傾きで、TIA の構成要素です。',
+ cbva:'前を向けるか（水平視）を表す顔の向きの角度です。首下り症候群や強直性脊椎炎の矯正量の決定に使います。',
+ mcgs:'X 線で評価できる頭部の傾きで、CBVA の代わりに使えます。',
+ ishi:'頚椎の弯曲の形（前弯・直線・S 字・後弯）を数値で表します。',
+ kline:'OPLL に対して、後方除圧で脊髄が後方へ逃げる余地があるかを表します。K-line(−) では後方除圧単独の効果が限られます。',
+ oplo:'骨化巣が脊柱管をどれだけ占めているかです。大きいほど前方除圧を考慮します。',
+ torg:'発育性脊柱管狭窄の指標です。比で表すので、X 線の拡大率の影響を受けません。',
+ canal:'脊柱管前後径の実測値で、発育性狭窄の評価に使います。',
+ tk412:'胸椎後弯の大きさです。全体の矢状面バランスや PJK のリスクに関わります。',
+ tk512:'側弯症の Lenke 分類で矢状面修飾子に使う胸椎後弯です。',
+ tk112:'上位胸椎まで含めた胸椎全体の後弯です。',
+ tk25:'上位胸椎の後弯です。上位胸椎カーブの構造性の判定に使います。',
+ tlk:'胸腰椎移行部の後弯です。正常ではほぼ 0° で、後弯があれば構造性カーブ・変性・外傷を疑います。',
+ pjk:'固定上端の隣接椎間の後弯です。術後の近位隣接椎間後弯（PJK）の判定に使います。',
+ pi:'骨盤の形を表す固有値で、成人では姿勢によって変わりません。その人に必要な腰椎前弯の量を決める基準になります。',
+ pt:'骨盤がどれだけ後ろへ傾いているか（後傾）です。前弯不足を骨盤の後傾で代償している程度を表します。',
+ ss:'仙骨上面の傾きです（PI = PT + SS）。腰椎前弯の形（Roussouly 分類）を決めます。',
+ ll:'腰椎全体の前弯です。PI との釣り合いが重要です。',
+ ll15:'L5/S1 を除いた腰椎前弯です。',
+ lll:'下位腰椎（L4–S1）の前弯で、腰椎前弯の大部分を担います。固定術での分節前弯の設定に重要です。',
+ ldi:'腰椎前弯のうち下位腰椎が占める割合で、前弯の配分の偏りを評価します（GAP スコアの項目）。',
+ pill:'骨盤の形（PI）に対して腰椎前弯が足りているかを表します。成人脊柱変形で最も重要な指標の一つです。',
+ llt:'PI から求めた、目標とすべき腰椎前弯の量です。',
+ disc34:'椎間板の楔状化（角度）と高さです。変性の程度や、固定術での分節前弯の評価に使います。',disc45:'椎間板の楔状化（角度）と高さです。変性の程度や、固定術での分節前弯の評価に使います。',disc5s:'椎間板の楔状化（角度）と高さです。変性の程度や、固定術での分節前弯の評価に使います。',
+ slip34:'上位椎が前方（または後方）へずれている程度で、すべり症の重症度を表します。前後屈での変化は不安定性の指標です。',slip45:'上位椎が前方（または後方）へずれている程度で、すべり症の重症度を表します。前後屈での変化は不安定性の指標です。',slip5s:'上位椎が前方（または後方）へずれている程度で、すべり症の重症度を表します。前後屈での変化は不安定性の指標です。',
+ sla:'すべった椎体がどれだけ前へ傾いているか（後弯）です。高度すべりの進行・不安定性の指標です。',
+ sta:'仙骨上面と仙骨後壁のなす角で、仙骨の形成不全の指標です。小さいと高度すべりの素因になります。',
+ sva:'体幹全体の前方への傾き（立位バランス）です。HRQOL と強く相関します。',
+ c2sva:'頭部（C2）まで含めた全体の前方偏位です。',
+ tpa:'体幹の前傾と骨盤の後傾を合わせて表す全体バランスの角度です。較正が不要で、姿勢の代償の影響を受けにくい指標です。',
+ t4pa:'上位胸椎（T4）の骨盤に対する位置です。L1PA との差で、胸椎と腰椎の調和を評価します。',
+ l1pa:'腰椎（L1）の骨盤に対する位置です。PI に応じた目標値があり、長範囲固定の矯正目標に使います。',
+ t4l1:'胸椎と腰椎のアライメントの不一致です。大きいと術後の機械的合併症のリスクが高まります。',
+ c2pa:'頭部（C2）まで含めた、骨盤に対する体幹の傾きです。',
+ gt:'体幹の前傾（C7）と骨盤の後傾を合わせた全体バランスの角度です。',
+ odha:'頭部の重心線（歯突起）が大腿骨頭の真上にあるかを表します。頭部まで含めた全体バランスの指標です。',
+ srs:'成人脊柱変形の重症度分類で、矢状面の 3 つの修飾子（PI−LL・PT・SVA）を判定します。',
+ gap:'PI に応じた理想値からのずれを点数化したものです。術後の機械的合併症の予測に使います。',
+ rous:'腰椎前弯の形の分類です。患者ごとの理想的な弯曲の形を考える際に使います。',
+ cobbPT:'側弯カーブの大きさで、側弯症の診断と治療方針の基本になります。',cobbMT:'側弯カーブの大きさで、側弯症の診断と治療方針の基本になります。',cobbTL:'側弯カーブの大きさで、側弯症の診断と治療方針の基本になります。',
+ cobbFr:'腰仙部の分節的なカーブです。変性側弯症で神経根症状の原因になります。',
+ c7csvl:'体幹の左右のバランス（冠状面バランス）です。',
+ avtT:'胸椎カーブの頂椎が正中からどれだけ左右へずれているかです。',avtL:'腰椎カーブの頂椎が正中からどれだけ左右へずれているかです。',
+ t1t:'T1 の左右の傾きで、肩と頚部のバランスに関係します。',
+ clav:'鎖骨の傾きで、肩の高さの左右差の指標です。',
+ rsh:'肩の高さの左右差で、見た目に直結します。',
+ pob:'骨盤の左右の傾きです。脚長差や腰仙部カーブの評価に使います。',
+ lld:'大腿骨頭の高さの左右差で、脚長差の目安です。',
+ nash:'椎体の回旋の程度です。',
+ lenke:'腰椎カーブと正中線（CSVL）の位置関係で、Lenke 分類の腰椎修飾子です。',
+ lka:'骨折部の局所的な後弯です。経時的な進行や不安定性の評価に使います。',
+ wedge:'骨折椎そのものの楔状化の程度です。',
+ fxh:'椎体前方の潰れの程度で、骨粗鬆症性椎体骨折の重症度を表します。',
+ fa1:'任意の2本の直線のなす角です。',fa2:'任意の2本の直線のなす角です。',f3p:'3点で作る角度です。',fd1:'2点間の距離です。',fd2:'2点間の距離です。',
+ frat:'2つの距離の比です。較正は不要です。',fpl:'点から直線までの垂直距離です。',ftilt:'直線の水平に対する傾きです。',
+};
+/* resolve every landmark of a parameter into one schematic coordinate system */
+function learnLoc(p){if(p.r==='free')return null;
+  for(const f of ['cvj','face','fx']){if(p.lm.every(k=>FIGP[f][k]))return{fig:f,pts:Object.fromEntries(p.lm.map(k=>[k,FIGP[f][k].map(q=>({x:q[0],y:q[1]}))])),mmpp:1/2.3}}
+  const ap=regView(p.r)==='c',d=demoFor('pre',ap?'ap':'lat');if(!d)return null;const pts={};
+  for(const k of p.lm){const src=GALIAS[k]||k;const a=(!GALIAS[k]&&d.pts[k])||d.all[src]||getPts({pts:d.pts},src);if(!a)return null;pts[k]=a.map(q=>({x:q.x,y:q.y}))}
+  return{fig:ap?'ap':'sag',pts,mmpp:d.mmpp}}
+function svgGuide(L,vb,W,sw){const out=[];const P1=k=>{if(typeof k!=='string')return k;const a=L.pts[k];if(!a)return null;return a.length>1?mid(a[0],a[1]):a[0]};
+  const ln=(a,b,dash)=>out.push(`<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="#5cc8f5" stroke-width="${(sw*.8).toFixed(2)}" ${dash?`stroke-dasharray="${(sw*3).toFixed(1)} ${(sw*2).toFixed(1)}"`:''} stroke-linecap="round"/>`);
+  const api={
+    seg(a,b,ext=0){let A,B;if(b==null){const r=L.pts[a];if(!r||r.length<2)return;A=r[0];B=r[1]}else{A=P1(a);B=P1(b)}if(!A||!B)return;const v=sub(B,A);ln(sub(A,mul(v,ext)),add(B,mul(v,ext)),true)},
+    perp(p,a,b){const Pp=P1(p),A=P1(a),B=P1(b);if(!Pp||!A||!B)return;ln(Pp,foot(Pp,A,B),true)},
+    perpL(p,k){const r=L.pts[k];if(r)api.perp(p,r[0],r[1])},
+    perp1(u,l){const U=L.pts[u],Lw=L.pts[l];if(!U||!Lw)return;const e=sub(Lw[0],Lw[1]),n={x:-e.y,y:e.x};ln(sub(Lw[1],mul(n,.6)),add(Lw[1],mul(n,.6)),true);api.perp(U[1],Lw[0],Lw[1])},
+    vert(p){const Pp=P1(p);if(!Pp)return;ln({x:Pp.x,y:vb[1]},{x:Pp.x,y:vb[1]+vb[3]},true)},
+    hor(k){const r=L.pts[k];let Pp;if(r&&r.length===2)Pp=r[0].x<r[1].x?r[0]:r[1];else Pp=P1(k);if(!Pp)return;ln({x:Pp.x-W*.04,y:Pp.y},{x:Pp.x+W*.3,y:Pp.y},true)},
+    hseg(a,b){const A=P1(a),B=P1(b);if(A&&B)ln(A,{x:B.x,y:A.y},true)},
+    norm(k){const r=L.pts[k];if(!r)return;const m=mid(r[0],r[1]),e=sub(r[0],r[1]),n={x:-e.y,y:e.x};ln(sub(m,mul(n,1.4)),add(m,mul(n,1.4)),true)}};
+  return{api,out}}
+function learnSVG(p,r){const L=learnLoc(p);if(!L)return'';
+  const items=p.lm.map(k=>({k,loc:{fig:L.fig,p:L.pts[k].map(q=>[q.x,q.y])},act:-1}));
+  return gSVG(items,'full',{extra:(vb,W,sw)=>{const g=svgGuide(L,vb,W,sw);p.lm.forEach(k=>{if(LM[k].type==='ln'&&/(sup|inf|^AP_|FX_|UIV)/.test(k))g.api.seg(k,null,.5)});if(p.dr)try{p.dr(g.api)}catch(e){}
+    let t='';if(r){const fs=W*.04;t=`<text x="${(vb[0]+W*.03).toFixed(1)}" y="${(vb[1]+fs*1.3).toFixed(1)}" font-size="${fs.toFixed(1)}" fill="#e4eaef" stroke="#05070a" stroke-width="${(fs*.25).toFixed(1)}" paint-order="stroke" font-family="system-ui,sans-serif" font-weight="600">例：${esc(fmtV(r))}${esc(r.u==='px'?' px':r.u)}</text>`}
+    return g.out.join('')+t}})}
+function learnHTML(p){const L=learnLoc(p);let ex=null;
+  if(L){try{ex=compute(p,{pts:L.pts,mmpp:L.mmpp,facing:'R',has:true,apStd:true,age:68})}catch(e){}}
+  const fig=L?learnSVG(p,ex):'';
+  const steps=p.lm.map(k=>{const d=LM[k];return`<li><b>${esc(d.name)}</b>${d.type!=='pt'?'（'+esc(d.subs.join(' → '))+'）':''}</li>`}).join('');
+  return`<div class="lrn">${PMEAN[p.id]?`<h4>意味</h4><p class="mean">${esc(PMEAN[p.id])}</p>`:''}
+   ${fig?`<h4>作図</h4><div class="gfig lfig">${fig}<div class="cap">シェーマ上の作図例。黄色が計測点、青の破線が作図線です。</div></div>`:''}
+   <h4>計測点（入力する順）</h4><ol>${steps}</ol>
+   <h4>計算方法と基準値</h4><p>${esc(p.ref)}</p></div>`}
+
 /* ================= disease-based measurement sets (レジデント向け) ================= */
 const SETS=[
  {id:'cs',n:'頚椎症性脊髄症・頚椎症',s:'頚椎症',img:'頚椎側面（中間位・前屈・後屈）。後弯や全身バランスが気になる例は全脊椎立位側面も。',
@@ -1192,7 +1314,7 @@ function setsClick(e){if(st.region!=='sets')return false;const t=e.target.closes
   if(t.hasAttribute('data-setpat')){const pp=patientOf(st.sid);if(pp&&sel){pp.set=sel.id;saveIndex();renderBody();toast('推移画面の主要項目がこのセットになります')}return true}
   if(t.dataset.setmeas){const ids=(t.dataset.setmeas==='all'?sel.core.concat(sel.opt):sel.core).filter(id=>regView(PID[id].r)==='s');
     if(slotView(st.slot)==='c')st.slot='lat';if(!cur().base){toast('側面スロットに画像を読み込んでください');renderAll();return true}startMeasure(ids);return true}
-  if(t.dataset.sp){const p=PID[t.dataset.sp];setRegion(p.r);st.sel=p.id;const sl=cur();if(!compute(p,sl)&&sl.base)startMeasure([p.id]);else renderAll();return true}
+  if(t.dataset.sp){const p=PID[t.dataset.sp];setRegion(p.r);st.sel=p.id;renderAll();$('sbody').scrollTop=0;return true}
   return false}
 
 /* ================= patients · studies · trend ================= */
@@ -1331,26 +1453,26 @@ const idx=await idbGet('index');
 const GB='#c3ccd4',GL='#e3e9ee',GD='#7c8893';
 const FIG={
  cvj:{vb:[0,30,400,320],cap:'頭蓋頚椎移行部 側面（右が前方）',svg:`
-<path d="M372,96 C382,40 300,22 230,24 C140,26 52,70 32,150 C28,178 52,204 80,215" fill="none" stroke="${GD}" stroke-width="5"/>
+<path d="M372,96 C382,40 300,22 230,24 C140,26 52,70 32,150 C28,190 50,222 84,236" fill="none" stroke="${GD}" stroke-width="5"/>
 <path d="M370,99 L300,108 L256,120" fill="none" stroke="${GB}" stroke-width="4" stroke-linecap="round"/>
 <path d="M256,120 C253,143 232,149 227,130 L224,114" fill="none" stroke="${GL}" stroke-width="3.5" stroke-linecap="round"/>
 <path d="M224,114 L244,138 L206,213 L192,206 Z" fill="${GB}" fill-opacity=".55" stroke="${GL}" stroke-width="2"/>
-<path d="M112,202 C100,212 90,218 80,216 C58,212 40,190 32,160 L46,152 C58,176 82,194 112,202 Z" fill="${GB}" fill-opacity=".55" stroke="${GL}" stroke-width="2"/>
+<path d="M112,226 C100,236 92,240 84,236 C62,230 42,205 32,170 L46,160 C58,190 82,215 112,226 Z" fill="${GB}" fill-opacity=".55" stroke="${GL}" stroke-width="2"/>
 <ellipse cx="140" cy="186" rx="20" ry="25" fill="${GL}" opacity=".16"/>
 <path d="M302,211 L394,212 L394,221 L304,219 Z" fill="${GB}" stroke="${GL}" stroke-width="1.5"/>
 <path d="M300,218 C286,230 276,242 270,256" fill="none" stroke="${GD}" stroke-width="7" stroke-linecap="round" opacity=".55"/>
 <g fill="${GB}" opacity=".45"><rect x="318" y="223" width="12" height="18" rx="4"/><rect x="334" y="223" width="12" height="18" rx="4"/><rect x="350" y="223" width="12" height="18" rx="4"/><rect x="366" y="223" width="12" height="18" rx="4"/></g>
 <path d="M298,252 L289,300 C297,320 340,323 398,321" fill="none" stroke="${GD}" stroke-width="5" opacity=".5"/>
 <rect x="160" y="228" width="44" height="22" rx="6" fill="${GL}" opacity=".13"/>
-<path d="M174,236 C175,226 180,219 187,218 C194,219 199,226 199,236 L201,255 L214,300 L170,303 L172,256 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<path d="M174,236 C175,226 182,219 190,218 C196,220 199,227 199,236 L201,255 L216,310 L170,300 L172,256 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
 <path d="M172,262 L150,256 L112,266 L86,286 L94,298 L124,292 L150,298 L171,296 Z" fill="${GD}" fill-opacity=".7" stroke="${GB}" stroke-width="1.5"/>
 <ellipse cx="158" cy="272" rx="7" ry="9" fill="none" stroke="#f4f7f9" stroke-width="2.5"/>
 <ellipse cx="212" cy="240" rx="7" ry="12" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
 <ellipse cx="120" cy="238" rx="13" ry="8" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
-<path d="M168,313 L214,310 L217,346 L168,349 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<path d="M168,310 L216,320 L218,352 L168,350 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
 <path d="M190,198 C178,215 168,232 168,250 C168,270 165,292 163,340" fill="none" stroke="#7fb7d8" stroke-width="2" stroke-dasharray="5 4"/>
 <g font-size="10" fill="#93a1ad" font-family="system-ui,sans-serif">
-<text x="330" y="206">硬口蓋</text><text x="262" y="100">トルコ鞍</text><text x="236" y="182">斜台</text><text x="30" y="226">後頭骨</text>
+<text x="330" y="206">硬口蓋</text><text x="262" y="100">トルコ鞍</text><text x="236" y="182">斜台</text><text x="22" y="252">後頭骨</text>
 <text x="104" y="160">乳様突起（重なる）</text><text x="140" y="214">大後頭孔</text><text x="222" y="262">C1前弓</text><text x="96" y="228">C1後弓</text>
 <text x="180" y="292">C2</text><text x="184" y="334">C3</text><text x="110" y="318">硬膜（MRI）</text><text x="300" y="250">軟口蓋</text></g>`},
  face:{vb:[0,0,200,240],cap:'頭部 側面（臨床写真・全身側面像）',svg:`
@@ -1358,18 +1480,18 @@ const FIG={
 <path d="M60,18 C20,30 10,90 30,140 C40,160 60,176 64,200 L66,240" fill="none" stroke="${GB}" stroke-width="3"/>
 <path d="M120,70 q10,-6 20,0" fill="none" stroke="${GD}" stroke-width="3"/>`},
  fx:{vb:[0,10,250,200],cap:'骨折椎と隣接椎 側面（右が前方）',svg:`
-<path d="M82,30 L168,26 L170,70 L84,74 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<path d="M82,26 L168,34 L170,74 L84,74 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
 <path d="M84,88 L170,100 L172,128 L86,132 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
-<path d="M86,146 L172,142 L174,186 L88,190 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
+<path d="M86,146 L172,142 L174,182 L88,192 Z" fill="${GB}" fill-opacity=".6" stroke="${GL}" stroke-width="2"/>
 <g fill="${GD}" opacity=".8"><path d="M84,40 L40,46 L30,60 L84,62Z"/><path d="M86,98 L42,104 L32,118 L86,122Z"/><path d="M88,156 L44,162 L34,176 L88,178Z"/></g>
 <g font-size="10" fill="#93a1ad" font-family="system-ui,sans-serif"><text x="178" y="52">上位隣接椎</text><text x="180" y="118">骨折椎</text><text x="182" y="170">下位隣接椎</text></g>`}
 };
 const FIGP={
- cvj:{PNS:[[300,215]],Opis:[[112,202]],Basion:[[192,206]],OccLow:[[81,216]],ClivSup:[[224,114]],TubS:[[255,121]],Nasion:[[372,96]],
-  DensTip:[[187,218]],DensA:[[199,240]],DensP:[[174,240]],C1A:[[212,240]],C1P:[[120,238]],C1aP:[[205,240]],C1pA:[[133,238]],C2ped:[[158,272]],
-  C2pwS:[[173,256]],C2pwI:[[170,303]],C2infMid:[[192,301.5]],C2c:[[189,280]],DuraV:[[168,247]],C2cm:[[156,286]],C2inf:[[214,300],[170,303]]},
+ cvj:{PNS:[[300,215]],Opis:[[112,226]],Basion:[[192,206]],OccLow:[[84,236]],ClivSup:[[224,114]],TubS:[[255,121]],Nasion:[[372,96]],
+  DensTip:[[190,218]],DensA:[[199,240]],DensP:[[174,240]],C1A:[[212,240]],C1P:[[120,238]],C1aP:[[205,240]],C1pA:[[133,238]],C2ped:[[158,272]],
+  C2pwS:[[173,256]],C2pwI:[[170,300]],C2infMid:[[193,305]],C2c:[[189,280]],DuraV:[[168,247]],C2cm:[[156,286]],C2inf:[[216,310],[170,300]]},
  face:{Brow:[[156,60]],Chin:[[142,198]]},
- fx:{FX_U:[[168,26],[82,30]],FX_L:[[174,186],[88,190]],FX_sup:[[170,100],[84,88]],FX_inf:[[172,128],[86,132]]}};
+ fx:{FX_U:[[168,34],[82,26]],FX_L:[[174,182],[88,192]],FX_sup:[[170,100],[84,88]],FX_inf:[[172,128],[86,132]]}};
 const GALIAS={UIVinf:'T10inf',UIV2sup:'T8sup',AP_ptU:'T2sup',AP_ptL:'T5inf'};
 function gLoc(k){for(const f in FIGP)if(FIGP[f][k])return{fig:f,p:FIGP[f][k]};
   if(/^(FR_|_cal)/.test(k))return null;
@@ -1385,7 +1507,7 @@ function shapesSVG(sh){return sh.map(o=>{const op=o.a!=null&&o.a<1?` opacity="${
   if(o.t==='q')return`<path d="M${o.a.x},${o.a.y} Q${o.b.x},${o.b.y} ${o.c.x},${o.c.y}" fill="none" stroke="${o.s}" stroke-width="4" opacity="${o.o}"/>`;return''}).join('')}
 const RM=(()=>{try{return matchMedia('(prefers-reduced-motion: reduce)').matches}catch(e){return false}})();
 /* items: [{k,loc,act}] act = sub-index being placed (-1 = none, show all labelled) */
-function gSVG(items,mode){const fig=items[0].loc.fig;let base,full;
+function gSVG(items,mode,opt){const fig=items[0].loc.fig;let base,full;
   if(FIG[fig]){base=FIG[fig].svg;full=FIG[fig].vb}else{const d=demoFor('pre',fig==='ap'?'ap':'lat');base=shapesSVG(d.shapes);full=[0,0,d.canvas.width,d.canvas.height]}
   const mmk=FIG[fig]?2.3:2.6,pts=items.flatMap(it=>it.loc.p);
   const xs=pts.map(q=>q[0]),ys=pts.map(q=>q[1]),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,bw=Math.max(...xs)-Math.min(...xs),bh=Math.max(...ys)-Math.min(...ys);
@@ -1402,6 +1524,7 @@ function gSVG(items,mode){const fig=items[0].loc.fig;let base,full;
       if(on&&mode==='thumb'||it.act===i)ov+=`<circle cx="${q[0]}" cy="${q[1]}" r="${r}" fill="none" stroke="#5cc8f5" stroke-width="${sw}">${RM?'':`<animate attributeName="r" values="${r};${r*1.7};${r}" dur="1.6s" repeatCount="indefinite"/>`}</circle>`;
       if(mode!=='thumb'){const sub=P.length===2?(d.subs[i]||''):'';const t=many?(i===0?d.name:''):(sub||d.name);
         const lf=q[0]>vb[0]+vb[2]*.55;if(t)ov+=`<text x="${lf?q[0]-r*1.2:q[0]+r*1.2}" y="${q[1]-r*1.2}" text-anchor="${lf?'end':'start'}" font-size="${fs}" fill="${col}" stroke="#05070a" stroke-width="${fs*.28}" paint-order="stroke" font-family="system-ui,sans-serif" font-weight="600">${esc(t)}</text>`}})});
+  if(opt&&opt.extra)ov=opt.extra(vb,W,sw)+ov;
   return`<svg viewBox="${vb.map(v=>v.toFixed(1)).join(' ')}" xmlns="http://www.w3.org/2000/svg"><rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}" fill="#0a0d10"/>${base}${ov}</svg>`}
 const EPTIP='骨棘は含めず、終板の皮質がつくる角（前上角・後上角など）を取ります。終板が二重に見えるとき（斜位）は2本の中間を取ります。';
 const GTIP={
