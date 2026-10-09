@@ -101,6 +101,7 @@ button{cursor:pointer}
 #regions button[aria-pressed="true"],.chips button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 #regions button small,.chips button small{font-family:var(--f-num);font-size:10.5px;opacity:.75}
 #sbody{overflow-y:auto;min-height:0;padding:0 12px 12px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
+#sbody>*{flex-shrink:0}
 #sheet.min #sbody{display:none}
 .rhead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;color:var(--mut);font-size:12px}
 .det{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
@@ -295,6 +296,7 @@ const ANTPOST=[['PNS','Opis'],['DensA','DensP'],['C1A','C1P'],['C1aP','C1pA'],['
 
 /* ================= parameters ================= */
 const REG=[
+ {id:'sets',n:'疾患別セット',v:'d',d:'疾患ごとに測っておくべき項目'},
  {id:'cvj',n:'頭蓋・CVJ',v:'s',d:'側面像（頭蓋〜C2）'},
  {id:'cx',n:'頚椎',v:'s',d:'頚椎側面像'},
  {id:'tx',n:'胸椎',v:'s',d:'胸椎・全脊椎側面像'},
@@ -389,8 +391,8 @@ const P=[
 {id:'t1s',r:'cx',n:'T1 slope',en:'T1 slope',lm:['T1sup'],f:g=>R(-th(g.l('T1sup')),'°'),
  ref:'T1 上終板の水平に対する傾き。平均 約25°。頚椎前弯の主要な決定因子。',dr:d=>d.hor('T1sup')},
 {id:'tscl',r:'cx',n:'T1S − CL',en:'T1 slope minus cervical lordosis',lm:['T1sup','C2inf','C7inf'],
- f:g=>{const v=-th(g.l('T1sup'))-lord(g,'C2inf','C7inf');return R(v,'°',v>20?'bad':'ok',v>20?'前弯不足（mismatch）':'')},
- ref:'T1 slope − C2–7 角。20° 超で頚椎前弯不足（mismatch）。頚椎後弯矯正の目標設定に用いる。'},
+ f:g=>{const v=-th(g.l('T1sup'))-lord(g,'C2inf','C7inf');return R(v,'°',v>=17?'warn':'ok',v>=17?'前弯不足（mismatch）':'')},
+ ref:'T1 slope − C2–7 角。Ames-ISSG 頚椎変形分類の修飾子の一つ。成人脊柱変形例では TS-CL 17° が C2–7 SVA 4 cm に相当（Protopsaltis 2018）。頚椎後弯矯正の目標設定に用いる。'},
 {id:'csva',r:'cx',n:'C2–7 SVA',en:'cSVA',lm:['C2c','C7pwS'],
  f:g=>{const v=g.p('C2c').x-g.p('C7pwS').x;return M(g,v,x=>x>40?'bad':'ok','前方を＋')},
  ref:'C2 椎体中心の鉛直線と C7 後上縁の水平距離（前方を＋）。40 mm 超で HRQOL 低下。',dr:d=>{d.vert('C2c');d.vert('C7pwS')}},
@@ -479,8 +481,8 @@ const P=[
 {id:'c2sva',r:'gl',n:'C2 SVA',en:'C2 sagittal vertical axis',lm:['C2c','S1pwS'],
  f:g=>M(g,g.p('C2c').x-g.p('S1pwS').x,null,'前方を＋'),ref:'C2 椎体中心の鉛直線と S1 後上縁の水平距離（前方を＋）。',dr:d=>{d.vert('C2c');d.vert('S1pwS')}},
 {id:'tpa',r:'gl',n:'TPA（T1 骨盤角）',en:'T1 pelvic angle',lm:['T1c','Hip','S1sup'],
- f:g=>{const v=pa(g,'T1c');return R(v,'°',v<14?'ok':v<=20?'warn':'bad')},
- ref:'骨頭中心–T1 椎体中心線と骨頭中心–S1 上終板中点線のなす角。PT や膝屈曲による代償の影響を受けにくい。TPA 20° ≒ SVA 46 mm・ODI 40 相当（Protopsaltis）。',dr:d=>{d.seg('Hip','T1c');d.seg('Hip','S1sup')}},
+ f:g=>{const v=pa(g,'T1c');return R(v,'°',v<14?'ok':'warn','目標 14° 未満')},
+ ref:'骨頭中心–T1 椎体中心線と骨頭中心–S1 上終板中点線のなす角。較正不要で、PT による代償の影響を受けにくい。HRQOL と相関し、術前計画の目標は 14° 未満（Protopsaltis 2014）。',dr:d=>{d.seg('Hip','T1c');d.seg('Hip','S1sup')}},
 {id:'t4pa',r:'gl',n:'T4PA',en:'T4 pelvic angle',lm:['T4c','Hip','S1sup'],f:g=>R(pa(g,'T4c'),'°'),
  ref:'骨頭中心–T4 椎体中心線と骨頭中心–S1 中点線のなす角。T4PA と L1PA の差は ±4° 以内が目標。',dr:d=>{d.seg('Hip','T4c');d.seg('Hip','S1sup')}},
 {id:'l1pa',r:'gl',n:'L1PA',en:'L1 pelvic angle',lm:['L1c','Hip','S1sup'],
@@ -771,7 +773,7 @@ function renderTop(){
   const b=$('bCal');if(sl.mmpp){b.textContent='較正 '+sl.mmpp.toFixed(3)+' mm/px';b.className='chip'}else{b.textContent='未較正';b.className='chip warn'}
 }
 function renderRegions(){const sl=cur();
-  $('regions').innerHTML=REG.map(r=>{let c='';if(r.id!=='dyn'){const ps=P.filter(p=>p.r===r.id);const tgt=r.v==='c'?S.ap:r.v==='s'&&slotView(st.slot)==='c'?S.lat:sl;
+  $('regions').innerHTML=REG.map(r=>{let c='';if(r.id!=='dyn'&&r.id!=='sets'){const ps=P.filter(p=>p.r===r.id);const tgt=r.v==='c'?S.ap:r.v==='s'&&slotView(st.slot)==='c'?S.lat:sl;
       const n=ps.filter(p=>compute(p,tgt)).length;c=`<small>${n}/${ps.length}</small>`}
     return`<button data-r="${r.id}" aria-pressed="${r.id===st.region}">${r.n}${c}</button>`}).join('')+'<button class="tr" data-tr="1">推移を見る</button>'}
 function renderPrompt(){const el=$('prompt');if(st.mode!=='measure'||!st.q){el.hidden=true;return}const it=curItem();if(!it){el.hidden=true;return}
@@ -785,6 +787,7 @@ function rowHTML(p,r,sl,need){const sel=p.id===st.sel;
   return`<button class="row" data-p="${p.id}" aria-current="${sel}"><span class="nm">${esc(p.n)}<small>${esc(r&&r.st?r.st:p.en)}</small></span><span class="val">${right}</span></button>`}
 function renderBody(){const b=$('sbody'),reg=REG.find(r=>r.id===st.region);
   if(st.region==='dyn'){b.innerHTML=dynHTML();return}
+  if(st.region==='sets'){b.innerHTML=setsHTML();return}
   const sl=cur(),ps=P.filter(p=>p.r===st.region);let h='';
   const p=selParam();
   if(p){const r=compute(p,sl),need=missing(p,sl);
@@ -815,7 +818,7 @@ function dynHTML(){const F=S.flex,E=S.ext;let h=`<div class="rhead"><span>前屈
 /* events */
 $('slots').addEventListener('click',e=>{const b=e.target.closest('button[data-s]');if(b){if(st.mode==='measure')stopMeasure();setSlot(b.dataset.s)}});
 $('regions').addEventListener('click',e=>{if(e.target.closest('[data-tr]')){openTrend();return}const b=e.target.closest('button[data-r]');if(b){if(st.mode==='measure')stopMeasure();setRegion(b.dataset.r);if(st.sheet==='min')setSheet('mid')}});
-$('sbody').addEventListener('click',e=>{const t=e.target.closest('[data-p],[data-a],[data-s2]');if(!t)return;
+$('sbody').addEventListener('click',e=>{if(setsClick(e))return;const t=e.target.closest('[data-p],[data-a],[data-s2]');if(!t)return;
   if(t.dataset.s2){setSlot(t.dataset.s2);if(st.region==='dyn')setRegion('cx');return}
   if(t.dataset.p){const p=PID[t.dataset.p],sl=cur();st.sel=p.id;if(!compute(p,sl)&&sl.base){startMeasure([p.id])}else renderAll();return}
   const a=t.dataset.a,p=selParam();
@@ -1127,6 +1130,71 @@ function buildDemoCor(o={}){
   const ALL={};for(const nm in V){ALL[nm+'sup']=[I(V[nm].sup.A),I(V[nm].sup.P)];if(V[nm].inf)ALL[nm+'inf']=[I(V[nm].inf.A),I(V[nm].inf.P)]}
   return{canvas:cv2,pts,mmpp:1/k,shapes:SH,all:ALL}}
 
+
+/* ================= disease-based measurement sets (レジデント向け) ================= */
+const SETS=[
+ {id:'cs',n:'頚椎症性脊髄症・頚椎症',s:'頚椎症',img:'頚椎側面（中間位・前屈・後屈）。後弯や全身バランスが気になる例は全脊椎立位側面も。',
+  core:['c27','t1s','tscl','csva','canal','torg'],opt:['c27h','kline','ishi','cbva','mcgs','sva'],dyn:['c27','c27h'],
+  why:['C2–7 角・T1 slope・T1S−CL・cSVA は、前方か後方かの術式選択と、後方除圧後の後弯化・成績不良の予測に使います。','C2–7 SVA が約 40 mm を超えると、後方固定術後の HRQOL が低下します（Tang 2012）。','脊柱管前後径と Torg-Pavlov 比で発育性狭窄を評価します。','前屈・後屈で可動域と不安定性を確認します（前後屈タブ）。'],
+  refs:['Tang JA, et al. Neurosurgery 2012;71:662-9（C2–7 SVA と HRQOL）','Ames CP, et al. J Neurosurg Spine 2015（Ames-ISSG 頚椎変形分類：cSVA・CBVA・TS-CL・mJOA）','Protopsaltis TS, et al. Int J Spine Surg 2018（TS-CL 17° ≒ C2–7 SVA 4 cm）','Pavlov H, et al. Radiology 1987（Torg-Pavlov 比）']},
+ {id:'opll',n:'頚椎後縦靱帯骨化症（OPLL）',s:'OPLL',img:'頚椎側面（中間位・前屈・後屈）＋CT 矢状断（骨化巣の形・厚さ）。',
+  core:['kline','oplo','c27','csva','t1s','tscl','canal'],opt:['torg','c27h','sva'],dyn:['c27'],
+  why:['K-line(−) では後方除圧単独で改善が不十分になりやすく、前方除圧や後方固定を検討します（Fujiyoshi 2008）。','占拠率 60% 以上や山型（hill-shaped）の骨化では椎弓形成術の成績が劣ります（Iwasaki 2007）。','頚椎アライメント（C2–7 角・cSVA・T1S−CL）も術式選択に関わります。'],
+  refs:['Fujiyoshi T, et al. Spine 2008（K-line）','Iwasaki M, et al. Spine 2007（占拠率 60%・山型骨化と術式）','Tang JA, et al. Neurosurgery 2012']},
+ {id:'cvj',n:'関節リウマチ頚椎・頭蓋頚椎移行部病変',s:'RA・CVJ',img:'頚椎側面（中間位・前屈・後屈）。頭蓋底を含めて撮影。必要に応じ CT・MRI。',
+  core:['adi','padi','ranawat','redlund','mcg','cxa','oc2'],opt:['chamb','mcrae','wack','bdi','powers','c12','grabb'],dyn:['adi','padi','oc2','c12'],
+  why:['ADI（前屈位）で環軸椎亜脱臼、PADI（SAC）で神経学的リスクを評価します。PADI 14 mm 以下は麻痺のリスク（Boden 1993）。','Ranawat・Redlund-Johnell・McGregor で垂直亜脱臼（頭蓋底陥入）をみます。','後頭頚椎固定では O–C2 角を術前中間位以上に保たないと、術後の嚥下障害・呼吸困難のリスクが上がります（Miyata 2009）。','Chiari 奇形では pB–C2 で腹側圧迫を評価します（Grabb 1999）。'],
+  refs:['Boden SD, et al. J Bone Joint Surg Am 1993（RA 頚椎と PADI）','Ranawat CS, et al. J Bone Joint Surg Am 1979','Redlund-Johnell I, Pettersson H. Acta Radiol 1984','Miyata M, et al. Spine 2009;34:184-8（O–C2 角と嚥下障害・呼吸困難）','Grabb PA, et al. Neurosurgery 1999（pB–C2）']},
+ {id:'dhs',n:'首下り症候群',s:'首下り',img:'全脊椎立位側面（頭部〜骨盤・骨頭）、頚椎側面の前屈・後屈（可撓性）、立位の臨床写真（CBVA）。',
+  core:['cbva','mcgs','c27','csva','t1s','tscl','sva','pill','pt'],opt:['tk412','ll','pi','tpa','c2sva','odha'],dyn:['c27'],
+  why:['頭部の向き（CBVA・McGregor slope）と頚椎後弯（C2–7 角・cSVA）で重症度を評価します。','頚椎だけでなく全脊椎の代償（胸椎後弯・SVA・PI−LL・PT）を必ず評価します。矯正手術では術前後の SVA と PI−LL が術後成績（再発・失敗）と関連したとする多施設研究があります（Kudo 2020）。','頚椎前後屈で後弯の可撓性（整復可能か）を確認します。','パーキンソン病などの神経筋疾患の合併に注意します（Terashi 2023）。'],
+  refs:['Kudo Y, et al. BMC Musculoskelet Disord 2020;21:382（首下り症候群の矯正術と脊椎骨盤アライメント）','Terashi H, et al. BMC Neurol 2023（パーキンソン病に伴う首下り症候群のアライメント）','Ames CP, et al. J Neurosurg Spine 2015（頚椎変形分類）']},
+ {id:'lss',n:'腰部脊柱管狭窄症・変性すべり症',s:'LSS・変性すべり',img:'腰椎側面（立位中間位・前屈・後屈）、腰椎正面。固定術を検討する例は全脊椎立位側面・正面も。',
+  core:['slip45','disc45','ll','lll','pi','pt','pill'],opt:['slip34','slip5s','disc34','disc5s','ss','sva','ldi','cobbTL'],dyn:['slip45','disc45','slip34','disc34'],
+  why:['すべり率（Meyerding）と前後屈での移動量・椎間角変化で不安定性を評価します。正常者でも一定の動きがあるため、絶対値だけで判断しないことに注意します（Boden & Wiesel 1990）。','変性すべり症では PI が大きい傾向があります。固定術では PI−LL と分節前弯（L4–S1）を整えることが重要です（Barrey 2007）。','術後の隣接椎間障害や後弯化を見据えて、PT・SVA も記録しておきます。'],
+  refs:['Meyerding HW. Surg Gynecol Obstet 1932（すべりの分類）','Boden SD, Wiesel SW. Spine 1990;15:571-6（正常者の腰仙椎分節運動）','Barrey C, et al. Eur Spine J 2007（腰椎変性疾患の脊椎骨盤バランス）','Schwab F, et al. Spine 2012（SRS-Schwab 分類）']},
+ {id:'isth',n:'腰椎分離すべり症（L5/S1）',s:'分離すべり',img:'腰仙椎側面（立位・骨頭を含む）、前屈・後屈。高度すべりは全脊椎立位側面。',
+  core:['slip5s','sla','pi','ss','pt','sva'],opt:['sta','lll','ll','disc5s'],dyn:['slip5s','disc5s'],
+  why:['すべり度（低度／高度）、PI、仙骨骨盤バランス（SS・PT）、C7 鉛直線と骨頭の位置で SDSG 分類（6 型）を判定します（Labelle 2011）。','高度すべりではすべり角や仙骨形態（仙骨テーブル角）も評価し、整復の要否の判断に使います。'],
+  refs:['Labelle H, Mac-Thiong JM, Roussouly P. Eur Spine J 2011（SDSG 分類）','Meyerding HW. Surg Gynecol Obstet 1932']},
+ {id:'asd',n:'成人脊柱変形',s:'成人脊柱変形',img:'全脊椎立位側面・正面（外耳孔〜大腿骨頭を含む、膝伸展位）。術前計画では side bending・supine も。',
+  core:['pi','pt','ll','pill','sva','tpa','l1pa','t4l1','gt','gap','srs','cobbTL','c7csvl'],opt:['ss','lll','ldi','tk412','tlk','cobbMT','cobbFr','t1s','c27','tscl','odha','pob','pjk'],dyn:[],
+  why:['SRS-Schwab 分類（PI−LL・PT・SVA と冠状面カーブ）で重症度を表します（Schwab 2012）。','GAP スコアは PI に応じた理想値との差（RPV・RLL・LDI・RSA）で評価し、機械的合併症の予測に使われます（Yilgor 2017）。','TPA は較正不要で代償の影響を受けにくく、術前目標は 14° 未満です（Protopsaltis 2014）。','L1PA（目標 ≒ 0.5×PI − 21°）と T4PA−L1PA 差（±4° 以内）は、長範囲固定の矯正目標として使われます（Hills 2024）。','術後は PJK 角（UIV〜UIV+2、10° 以上かつ 10° 以上の増加）を追います（Glattes 2005）。頚椎の代償（T1S・C2–7 角）も記録します。'],
+  refs:['Schwab F, et al. Spine 2012（SRS-Schwab 成人脊柱変形分類）','Yilgor C, et al. J Bone Joint Surg Am 2017（GAP スコア）','Protopsaltis T, et al. J Bone Joint Surg Am 2014;96:1631-40（TPA）','Hills J, et al. J Bone Joint Surg Am 2024（T4-L1-Hip axis）','Glattes RC, et al. Spine 2005（PJK）','Roussouly P, et al. Spine 2005（腰椎前弯の形態分類）']},
+ {id:'ais',n:'思春期特発性側弯症',s:'AIS',img:'全脊椎立位正面・側面、side bending（左右）。成長評価に骨盤（Risser）を含める。',
+  core:['cobbPT','cobbMT','cobbTL','lenke','tk512','c7csvl','avtT','avtL','clav','rsh','t1t'],opt:['nash','tk25','tlk','pob','lld','sva'],dyn:[],
+  why:['3 つのカーブの Cobb 角、腰椎修飾子（CSVL と腰椎頂椎）、胸椎矢状面修飾子（T5–12）で Lenke 分類を行います。構造性の判定には side bending 像が必要です（Lenke 2001）。','肩バランス（鎖骨角・肩高差・T1 tilt）は術後の肩の非対称の予測に使います（Kuklo 2002）。','回旋（Nash-Moe）、AVT、冠状面バランスも記録します。'],
+  refs:['Lenke LG, et al. J Bone Joint Surg Am 2001（Lenke 分類）','Kuklo TR, et al. Spine 2002（肩バランスの X 線指標）','Nash CL, Moe JH. J Bone Joint Surg Am 1969（椎体回旋）']},
+ {id:'fx',n:'胸腰椎骨折・骨粗鬆症性椎体骨折',s:'椎体骨折',img:'胸腰椎側面（可能なら立位と臥位の比較で不安定性を評価）、正面。陳旧例は全脊椎立位側面。',
+  core:['lka','wedge','fxh'],opt:['sva','pill','pt','tlk'],dyn:[],
+  why:['局所後弯角・楔状角・前方椎体高の圧潰率で変形の程度を評価し、経過で進行を追います。','圧潰の程度は Genant の半定量法（20–25%・25–40%・40% 超）で分類します（Genant 1993）。','陳旧性の後弯では全体のバランス（SVA・PI−LL・PT）も評価します。'],
+  refs:['Genant HK, et al. J Bone Miner Res 1993（半定量的椎体骨折評価）']},
+];
+function setSlotFor(p){return regView(p.r)==='c'?S.ap:(slotView(st.slot)==='c'?S.lat:cur())}
+function setsHTML(){const sel=SETS.find(x=>x.id===st.setSel);
+  if(!sel){return`<div class="rhead"><span>疾患を選ぶと、論文に基づいて測っておくべき項目と理由を表示します</span></div><div class="list">${SETS.map(x=>{const n=x.core.filter(id=>compute(PID[id],setSlotFor(PID[id]))).length;
+    return`<button class="row" data-set="${x.id}"><span class="nm">${esc(x.n)}<small>必須 ${x.core.length} 項目・推奨 ${x.opt.length} 項目</small></span><span class="val"><small>${n}/${x.core.length} 計測済</small></span></button>`}).join('')}</div>
+    <p class="small">各セットは代表的な論文に基づく目安です。施設の方針や症例に合わせて項目を追加してください。</p>`}
+  const row=id=>{const p=PID[id],sl=setSlotFor(p);return rowHTML(p,compute(p,sl),sl,missing(p,sl)).replace('class="row" data-p=','class="row" data-sp=')};
+  const pp=patientOf(st.sid),hasCor=sel.core.concat(sel.opt).some(id=>regView(PID[id].r)==='c'),hasSag=sel.core.concat(sel.opt).some(id=>regView(PID[id].r)==='s');
+  return`<div class="fl"><button class="btn sm ghost" data-setback>← 疾患一覧</button>${pp?`<button class="btn sm" data-setpat>${pp.set===sel.id?'この患者のセットに設定済み':'この患者のセットにする'}</button>`:''}</div>
+  <div class="det"><h3>${esc(sel.n)}</h3><p><b style="color:var(--fg);font-weight:600">撮影：</b>${esc(sel.img)}</p>
+   <div class="acts">${hasSag?`<button class="btn sm pri" data-setmeas="core">必須項目をまとめて測定</button><button class="btn sm" data-setmeas="all">推奨も含めて測定</button>`:''}${hasCor?'<span class="small">正面像の項目は「正面」スロットで測定します。</span>':''}</div></div>
+  <div class="rhead"><span>必須項目</span></div><div class="list">${sel.core.map(row).join('')}</div>
+  <div class="rhead"><span>推奨項目</span></div><div class="list">${sel.opt.map(row).join('')}</div>
+  ${sel.dyn.length?`<p class="small">前屈・後屈スロットでも ${sel.dyn.map(id=>PID[id].n).join('、')} を測ると「前後屈」タブに変化量が表示されます。</p>`:''}
+  <div class="det"><h3>測定の意義</h3>${sel.why.map(w=>`<p>・${esc(w)}</p>`).join('')}</div>
+  <div class="det"><h3>主な文献</h3>${sel.refs.map(r=>`<p>${esc(r)}</p>`).join('')}<p>基準値・閾値は原著で確認のうえ、施設の基準に合わせて使用してください。</p></div>`}
+function setsClick(e){if(st.region!=='sets')return false;const t=e.target.closest('[data-set],[data-setback],[data-setmeas],[data-sp],[data-setpat]');if(!t)return false;
+  if(t.dataset.set!=null){st.setSel=t.dataset.set;renderBody();$('sbody').scrollTop=0;return true}
+  if(t.hasAttribute('data-setback')){st.setSel=null;renderBody();return true}
+  const sel=SETS.find(x=>x.id===st.setSel);
+  if(t.hasAttribute('data-setpat')){const pp=patientOf(st.sid);if(pp&&sel){pp.set=sel.id;saveIndex();renderBody();toast('推移画面の主要項目がこのセットになります')}return true}
+  if(t.dataset.setmeas){const ids=(t.dataset.setmeas==='all'?sel.core.concat(sel.opt):sel.core).filter(id=>regView(PID[id].r)==='s');
+    if(slotView(st.slot)==='c')st.slot='lat';if(!cur().base){toast('側面スロットに画像を読み込んでください');renderAll();return true}startMeasure(ids);return true}
+  if(t.dataset.sp){const p=PID[t.dataset.sp];setRegion(p.r);st.sel=p.id;const sl=cur();if(!compute(p,sl)&&sl.base)startMeasure([p.id]);else renderAll();return true}
+  return false}
+
 /* ================= patients · studies · trend ================= */
 const TPL=['初診','術前','術直後','術後1週','術後1か月','術後3か月','術後6か月','術後1年','術後2年','術後5年','最終観察','経過観察'];
 let DL=null;try{if(window.claude&&window.claude.use)window.claude.use('downloads').then(d=>{DL=d}).catch(()=>{})}catch(e){}
@@ -1162,7 +1230,8 @@ function patientView(pid){const isNew=pid==='new',p=isNew?{code:'',name:'',dob:'
      <span class="meta">${countVals(s.id)} 項目計測${s.id===st.sid?' · 表示中':''}</span><span class="sa"><button class="btn sm danger" data-del="0">削除</button><button class="btn sm pri" data-open>開く</button></span></div>`).join('');
   openModal(`<div class="mh"><h2>${isNew?'新規患者':esc(p.code||'患者情報')}</h2><span class="fl"><button class="btn sm ghost" id="pBackL">一覧</button><button class="btn sm ghost" data-x>閉じる</button></span></div>
    <div class="grid2">${f('code','患者 ID（必須）','text','院内ID・匿名化コード')}${f('name','氏名・イニシャル（任意）')}${f('dob','生年月日','date')}${f('age','年齢（生年月日がない場合）','number')}
-    <div class="fld"><label for="pf_sex">性別</label><select id="pf_sex">${['','男性','女性'].map(v=>`<option${p.sex===v?' selected':''}>${v}</option>`).join('')}</select></div>${f('dx','診断')}${f('op','術式・手術日')}</div>
+    <div class="fld"><label for="pf_sex">性別</label><select id="pf_sex">${['','男性','女性'].map(v=>`<option${p.sex===v?' selected':''}>${v}</option>`).join('')}</select></div>${f('dx','診断')}${f('op','術式・手術日')}
+    <div class="fld"><label for="pf_set">測定セット</label><select id="pf_set"><option value="">（指定なし）</option>${SETS.map(x=>`<option value="${x.id}"${p.set===x.id?' selected':''}>${x.n}</option>`).join('')}</select></div></div>
    <div class="fld"><label for="pf_memo">メモ</label><textarea id="pf_memo">${esc(p.memo||'')}</textarea></div>
    <div class="fl"><button class="btn sm pri" id="pSave">${isNew?'登録する':'患者情報を保存'}</button>${!isNew?'<button class="btn sm" id="pTrend">推移を見る</button>':''}</div>
    ${isNew?'':`<div class="fs"><span class="lab">測定日（${ss.length} 回）</span>
@@ -1172,7 +1241,7 @@ function patientView(pid){const isNew=pid==='new',p=isNew?{code:'',name:'',dob:'
    <div class="fs"><span class="lab">患者の削除</span><div class="fl"><button class="btn sm danger" id="pDel" data-step="0">この患者と全測定を削除</button></div></div>`}
    <datalist id="tplList">${TPL.map(t=>`<option value="${t}">`).join('')}</datalist>`);
   $('pBackL').onclick=()=>listView('');
-  $('pSave').onclick=async()=>{const o={};['code','name','dob','age','dx','op','memo'].forEach(k=>o[k]=$('pf_'+k).value.trim());o.sex=$('pf_sex').value;
+  $('pSave').onclick=async()=>{const o={};['code','name','dob','age','dx','op','memo'].forEach(k=>o[k]=$('pf_'+k).value.trim());o.sex=$('pf_sex').value;o.set=$('pf_set').value;
     if(!o.code){toast('患者 ID を入力してください');$('pf_code').focus();return}
     if(isNew){const id=addPatient(o);patientView(id);toast('登録しました。測定日を追加してください')}else{Object.assign(p,o);saveIndex();renderAll();toast('保存しました')}};
   if(isNew)return;
@@ -1210,9 +1279,10 @@ function trendCSV(pid){const {ss,vals,all}=trendData(pid),p=DBI.patients.find(x=
   all.forEach(r=>{const u=(vals.find(v=>v[r.id])||{})[r.id];c+=[q(r.n),q(u?u.u:''),...vals.map(v=>q(v[r.id]?fmtV(v[r.id]):''))].join(',')+'\n'});return c}
 function openTrend(pid){if(st.sid)saveNow();pid=pid||st.pid;const p=DBI.patients.find(x=>x.id===pid);if(!p){toast('患者が選択されていません');openPatients('list');return}
   const {ss,vals,all}=trendData(pid);
-  const regs=[{id:'key',n:'主要項目'}].concat(REG.filter(r=>all.some(q=>q.r===r.id)).map(r=>({id:r.id,n:r.n})));
+  const PS=p.set&&SETS.find(x=>x.id===p.set),KEY=PS?PS.core.concat(PS.opt):KEYP;
+  const regs=[{id:'key',n:PS?'セット：'+PS.s:'主要項目'}].concat(REG.filter(r=>all.some(q=>q.r===r.id)).map(r=>({id:r.id,n:r.n})));
   if(!regs.find(r=>r.id===st.trReg))st.trReg='key';
-  let rows=st.trReg==='key'?all.filter(q=>KEYP.includes(q.id)).sort((a,b)=>KEYP.indexOf(a.id)-KEYP.indexOf(b.id)):all.filter(q=>q.r===st.trReg);
+  let rows=st.trReg==='key'?all.filter(q=>KEY.includes(q.id)).sort((a,b)=>KEY.indexOf(a.id)-KEY.indexOf(b.id)):all.filter(q=>q.r===st.trReg);
   if(st.trReg==='key'&&!rows.length){st.trReg=regs[1]?regs[1].id:'key';rows=all.filter(q=>q.r===st.trReg)}
   if(!rows.find(q=>q.id===st.trSel)){const num=q=>vals.map(v=>v[q.id]).filter(r=>r&&typeof r.v==='number').map(r=>r.v);st.trSel=(rows.find(q=>{const a=num(q);return a.length>1&&Math.max(...a)-Math.min(...a)>0.05})||rows.find(q=>num(q).length)||rows[0]||{}).id||null}
   const cell=r=>r?`<span class="${r.s||''}">${esc(fmtV(r))}</span>`:'<span style="color:var(--mut)">—</span>';

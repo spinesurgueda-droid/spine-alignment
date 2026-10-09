@@ -1,5 +1,5 @@
 // Spine Align service worker: works offline; fetches the latest app when online.
-const CACHE = 'spine-align-v2';
+const CACHE = 'spine-align-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
