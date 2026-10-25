@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>矢状面 代償マップ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap">
+<style>
+/* Layout: sticky figure on the left, step-by-step explanation + live measurements on the right. */
+:root{
+  --bg:#EDF1F3; --surface:#FFFFFF; --surface2:#F4F7F8; --ink:#13222B; --muted:#566872; --line:#D2DCE2;
+  --accent:#0B6E8F; --accent-soft:#DDF0F6; --on-accent:#FFFFFF;
+  --ok:#1C7F46; --warn:#A85F00; --bad:#BC2F3D; --ok-bg:#E1F3E8; --warn-bg:#FAEBD3; --bad-bg:#FADFE2;
+  --c-pel:#6A45D1; --c-lum:#1F68C9; --c-tho:#B02A83; --c-cer:#0A7F8C; --c-t1:#8A6A00;
+  --body:#E3E9ED; --body-line:#B5C3CB;
+  --font-d:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;
+  --font-b:'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif;
+  --font-m:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0C1317; --surface:#141E25; --surface2:#1A2730; --ink:#E6EEF2; --muted:#9BAEB9; --line:#2A3A44;
+  --accent:#5CC3E6; --accent-soft:#16384A; --on-accent:#08242F;
+  --ok:#5CCB8A; --warn:#F0B04A; --bad:#FF7F8B; --ok-bg:#15332443; --warn-bg:#3A2B11; --bad-bg:#3E1B21;
+  --c-pel:#A992FF; --c-lum:#6FA9FF; --c-tho:#F281C9; --c-cer:#3FD0DD; --c-t1:#E8C24A;
+  --body:#1E2C35; --body-line:#3A4E5A; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0C1317; --surface:#141E25; --surface2:#1A2730; --ink:#E6EEF2; --muted:#9BAEB9; --line:#2A3A44;
+  --accent:#5CC3E6; --accent-soft:#16384A; --on-accent:#08242F;
+  --ok:#5CCB8A; --warn:#F0B04A; --bad:#FF7F8B; --ok-bg:#15332443; --warn-bg:#3A2B11; --bad-bg:#3E1B21;
+  --c-pel:#A992FF; --c-lum:#6FA9FF; --c-tho:#F281C9; --c-cer:#3FD0DD; --c-t1:#E8C24A;
+  --body:#1E2C35; --body-line:#3A4E5A; color-scheme:dark;}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:400 15px/1.75 var(--font-b);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 56px}
+.wrap{max-width:1240px;margin:0 auto}
+h1,h2,h3{font-family:var(--font-d);margin:0;text-wrap:balance;line-height:1.35}
+h1{font-size:clamp(24px,3.6vw,38px);font-weight:700;letter-spacing:.01em}
+h2{font-size:clamp(20px,2.4vw,25px);font-weight:700}
+h3{font-size:15px;font-weight:700}
+p{margin:0}
+header{display:grid;gap:10px;max-width:70ch;grid-column:2;grid-row:1}
+.lead{color:var(--muted)}
+.layout{display:grid;grid-template-columns:minmax(0,540px) minmax(0,1fr);gap:36px;align-items:start}
+.stage{grid-column:1;grid-row:1 / span 2;position:sticky;top:max(12px,env(safe-area-inset-top,0px));display:flex;flex-direction:column;height:min(calc(100vh - 24px),820px);
+  background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;z-index:5}
+.stage-head{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;justify-content:space-between;padding:10px 14px 0}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font:500 12px/1.4 var(--font-m);color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.chk{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);cursor:pointer}
+.chk input{accent-color:var(--accent)}
+#fig{flex:1;min-height:0;width:100%;display:block}
+.narr{padding:10px 16px 14px;border-top:1px solid var(--line);font-size:14px;line-height:1.7;min-height:5.2em;background:var(--surface2)}
+.panel{display:grid;gap:28px;min-width:0;grid-column:2;grid-row:2}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+.tab{flex:none;font:500 13px/1 var(--font-b);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:999px;padding:9px 14px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+button{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.scene{display:grid;gap:14px}
+.scene .eng{font-size:14px;color:var(--ink);padding-left:12px;border-left:3px solid var(--accent)}
+.scene ul{margin:0;padding-left:1.2em;display:grid;gap:6px;color:var(--ink)}
+.scene .muted{color:var(--muted);font-size:13px}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{font:500 13px/1.3 var(--font-b);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;text-align:left}
+.btn:hover{border-color:var(--accent)}
+.btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink);font-weight:700}
+section.block{display:grid;gap:12px;padding-top:22px;border-top:1px solid var(--line)}
+.sw-row{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center}
+.sw{display:inline-flex;gap:10px;align-items:center;font-size:14px;cursor:pointer;background:none;border:0;color:var(--ink);padding:4px 0}
+.sw .trk{width:40px;height:22px;border-radius:99px;background:var(--line);position:relative;transition:background .2s}
+.sw .trk::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:var(--surface);transition:transform .2s;box-shadow:0 1px 2px #0004}
+.sw[aria-checked="true"] .trk{background:var(--accent)}
+.sw[aria-checked="true"] .trk::after{transform:translateX(18px)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:13px}
+.seg button{background:var(--surface);color:var(--ink);border:0;padding:7px 12px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+.gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.gauge .gl{display:flex;justify-content:space-between;font:500 12px var(--font-m);color:var(--muted);margin-bottom:5px}
+.gauge .bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden}
+.gauge .bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:99px}
+.gauge.full .bar i{background:var(--bad)}
+.progress{display:grid;gap:10px}
+.progress input{width:100%;accent-color:var(--accent)}
+.stages{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.stg{font-size:12.5px;line-height:1.5;border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--muted)}
+.stg b{display:block;color:inherit;font-weight:700}
+.stg.on{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+.stg.on.crit{border-color:var(--bad);background:var(--bad-bg)}
+.grp{display:grid;gap:8px;padding:12px;border-radius:10px;border:1px solid transparent;transition:opacity .25s,border-color .25s,background .25s}
+.grp.dim{opacity:.55}
+.grp.act{border-color:var(--accent);background:var(--surface)}
+.grp h3{display:flex;gap:8px;align-items:baseline}
+.grp h3 span{font:500 12px var(--font-m);color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:8px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px;display:grid;gap:2px;align-content:start;min-width:0}
+.tile .tl{font-size:12px;color:var(--muted);line-height:1.4}
+.tile .tv{font:600 25px/1.2 var(--font-m);font-variant-numeric:tabular-nums}
+.tile .tv small{font:400 12px var(--font-m);color:var(--muted);margin-left:3px}
+.tile .tr{font-size:11px;color:var(--muted);line-height:1.4}
+.chip{justify-self:start;font:500 11.5px/1 var(--font-b);padding:4px 7px;border-radius:99px;margin-top:3px}
+.chip.l0{color:var(--ok);background:var(--ok-bg)}.chip.l0::before{content:"● "}
+.chip.l1{color:var(--warn);background:var(--warn-bg)}.chip.l1::before{content:"▲ "}
+.chip.l2{color:var(--bad);background:var(--bad-bg)}.chip.l2::before{content:"■ "}
+.profile{display:grid;grid-template-columns:minmax(0,270px) minmax(0,1fr);gap:18px;align-items:start}
+.eqs{display:grid;gap:14px;font:500 13.5px/1.7 var(--font-m)}
+.eqs .eqh{font:700 13px var(--font-b);color:var(--ink);margin-bottom:2px}
+.pibar{display:flex;height:26px;border-radius:6px;overflow:hidden;margin-top:6px;font:600 12px/26px var(--font-m);color:#fff}
+.pibar span{display:block;text-align:center;white-space:nowrap;overflow:hidden;min-width:0}
+.sliders{display:grid;gap:10px}
+.srow{display:grid;grid-template-columns:minmax(120px,170px) 1fr 58px;gap:10px;align-items:center;font-size:13px}
+.srow input{width:100%;accent-color:var(--accent)}
+.srow output{font:600 13px var(--font-m);text-align:right}
+.srow input:disabled{opacity:.5}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.cf{display:grid;gap:3px;font-size:12px;color:var(--muted)}
+.cf input{font:500 14px var(--font-m);padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);width:100%}
+.cmp{width:100%;border-collapse:collapse;font:500 13px var(--font-m)}
+.cmp th,.cmp td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right}
+.cmp th:first-child,.cmp td:first-child{text-align:left;font-family:var(--font-b)}
+.cmp th{color:var(--muted);font-weight:500;font-family:var(--font-b)}
+.note{font-size:12.5px;color:var(--muted);display:grid;gap:6px}
+.note ul{margin:0;padding-left:1.2em;display:grid;gap:4px}
+details>summary{cursor:pointer;font-weight:700;font-size:15px}
+/* SVG figure */
+.limb,.limbo{fill:none;stroke-linecap:round}.limb{stroke:var(--body)}.limbo{stroke:var(--body-line)}
+.torso{fill:var(--body);stroke:var(--body-line);stroke-width:2.5}
+.headc{fill:var(--body);stroke:var(--body-line);stroke-width:3}
+.nose{fill:var(--body);stroke:var(--body-line);stroke-width:3;stroke-linejoin:round}
+.eye{fill:var(--ink)}
+.pelvis{fill:var(--c-pel);fill-opacity:.2;stroke:var(--c-pel);stroke-width:3;stroke-linejoin:round}
+.hipc{fill:var(--surface);stroke:var(--c-pel);stroke-width:4}
+.vb{stroke:var(--body);stroke-width:2.5;stroke-linejoin:round}
+.vb-lum{fill:var(--c-lum)}.vb-tho{fill:var(--c-tho)}.vb-cer{fill:var(--c-cer)}
+.spin{stroke:var(--muted);stroke-width:2.2;opacity:.55;stroke-linecap:round}
+.plumb{stroke:var(--ink);stroke-width:3.2}
+.ref{stroke:var(--muted);stroke-width:2;stroke-dasharray:9 8;opacity:.8}
+.ref2{stroke:var(--accent);stroke-width:2.6;stroke-dasharray:9 7}
+.dim{stroke:var(--ink);stroke-width:2.6;fill:none}
+.dimh{fill:var(--ink)}
+[class*="s-"]{fill:none;stroke-linecap:round}
+.s-pel{stroke:var(--c-pel);stroke-width:3.4}.s-lum{stroke:var(--c-lum);stroke-width:3.4}.s-tho{stroke:var(--c-tho);stroke-width:3.4}
+.s-cer{stroke:var(--c-cer);stroke-width:3.4}.s-t1{stroke:var(--c-t1);stroke-width:3.4}.s-ink{stroke:var(--ink);stroke-width:2.6}
+.thin{stroke-width:2!important}.dsh{stroke-dasharray:8 7}.hl{stroke-width:7!important}
+.march{stroke-dasharray:9 8;animation:march 1s linear infinite}
+@keyframes march{to{stroke-dashoffset:-34}}
+.gaze{stroke:var(--accent);stroke-width:3;stroke-dasharray:3 8;stroke-linecap:round}
+.lb{font:600 22px var(--font-m);paint-order:stroke;stroke:var(--surface);stroke-width:7px;stroke-linejoin:round}
+.f-pel{fill:var(--c-pel)}.f-lum{fill:var(--c-lum)}.f-tho{fill:var(--c-tho)}.f-cer{fill:var(--c-cer)}.f-t1{fill:var(--c-t1)}
+.f-ink{fill:var(--ink)}.f-acc{fill:var(--accent)}.f-mut{fill:var(--muted)}
+.vl{font:500 18px var(--font-m);fill:var(--muted);paint-order:stroke;stroke:var(--surface);stroke-width:5px}
+.axl{font:500 11px var(--font-m);fill:var(--muted)}
+@media (max-width:920px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:20px}
+  header,.stage,.panel{grid-column:1;grid-row:auto}
+  .stage{position:relative;top:auto;height:min(72vh,620px)}
+  .profile{grid-template-columns:1fr}
+  .narr{font-size:13px;padding:8px 12px 10px;min-height:4.6em}
+  .srow{grid-template-columns:110px 1fr 52px}
+}
+@media (prefers-reduced-motion:reduce){.march{animation:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<div class="layout">
+<header>
+  <h1><span style="white-space:nowrap">矢状面アライメント</span> <span style="white-space:nowrap">代償マップ</span></h1>
+  <p class="lead">背骨は骨盤から頭まで続く一本の連なりです。どこかが足りないと、別の場所が肩代わりします。骨盤・腰椎・胸椎・頚椎を動かして、その連鎖を確かめてください。数値の意味は、医師でない共同研究者にも通じる言葉で添えています。</p>
+</header>
+
+  <div class="stage" aria-label="側面像のシミュレーション">
+    <div class="stage-head">
+      <div class="legend"><span><i style="background:var(--c-pel)"></i>骨盤</span><span><i style="background:var(--c-lum)"></i>腰椎</span><span><i style="background:var(--c-tho)"></i>胸椎</span><span><i style="background:var(--c-cer)"></i>頚椎</span><span><i style="background:var(--c-t1)"></i>T1 上縁</span></div>
+      <label class="chk"><input type="checkbox" id="showAll"> すべての計測線を表示</label>
+    </div>
+    <svg id="fig" viewBox="-375 0 860 1280" preserveAspectRatio="xMidYMid meet" role="img" aria-label="立位の側面像。骨盤、腰椎、胸椎、頚椎の角度を変えると、体幹と頭の位置が連動して動く。">
+      <g id="dyn"></g>
+    </svg>
+    <div class="narr" id="narr"></div>
+  </div>
+
+  <div class="panel">
+    <div>
+      <div class="tabs" role="tablist" id="tabs" aria-label="解説の項目"></div>
+    </div>
+    <article class="scene" id="scene"></article>
+
+    <section class="block" id="compBlock">
+      <h3>代償のしくみ（体が自動で使う逃げ道）</h3>
+      <div class="sw-row">
+        <button class="sw" role="switch" id="swPel" aria-checked="false"><span class="trk"></span>骨盤を後ろに倒して受ける（PT↑）</button>
+        <button class="sw" role="switch" id="swNeck" aria-checked="false"><span class="trk"></span>頚椎を反らして受ける（CL↑）</button>
+        <button class="sw" role="switch" id="swKnee" aria-checked="false"><span class="trk"></span>膝を曲げて受ける（膝屈曲）</button>
+      </div>
+      <div class="sw-row">
+        <span class="muted" style="font-size:13px;color:var(--muted)">股関節の伸展予備力</span>
+        <span class="seg" id="segPel"><button data-v="good" aria-pressed="true">十分</button><button data-v="low" aria-pressed="false">低下（股関節の拘縮・変形）</button></span>
+        <span class="muted" style="font-size:13px;color:var(--muted)">膝の屈曲予備力</span>
+        <span class="seg" id="segKnee"><button data-v="good" aria-pressed="true">十分</button><button data-v="low" aria-pressed="false">低下（膝OA・拘縮）</button></span>
+        <span class="muted" style="font-size:13px;color:var(--muted)">頚椎の予備力</span>
+        <span class="seg" id="segNeck"><button data-v="good" aria-pressed="true">十分</button><button data-v="low" aria-pressed="false">低下（変性・硬い）</button></span>
+      </div>
+      <div class="gauges">
+        <div class="gauge" id="gPel"><div class="gl"><span>骨盤の使用量</span><span id="gPelT"></span></div><div class="bar"><i></i></div></div>
+        <div class="gauge" id="gKnee"><div class="gl"><span>膝の使用量</span><span id="gKneeT"></span></div><div class="bar"><i></i></div></div>
+        <div class="gauge" id="gNeck"><div class="gl"><span>頚椎の使用量</span><span id="gNeckT"></span></div><div class="bar"><i></i></div></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h3>いまの計測値（図と同じ値）</h3>
+      <div id="metrics" style="display:grid;gap:4px"></div>
+    </section>
+
+    <section class="block">
+      <h3>傾きは下から積み上がる</h3>
+      <div class="profile">
+        <figure style="margin:0">
+          <svg id="prof" viewBox="0 0 270 350" role="img" aria-label="仙骨から C2 まで、脊柱各部の前方への傾きを示すグラフ。右が前傾、左が後傾。" style="width:100%;max-width:270px;display:block"></svg>
+          <figcaption class="note" style="margin-top:4px">縦軸は脊柱の高さ、横軸はその高さでの前傾角（垂直からの傾き）。腰椎前弯で左へ戻り、胸椎後弯で右へ振れ、頚椎前弯でまた左へ戻ります。</figcaption>
+        </figure>
+        <div class="eqs">
+          <div><div class="eqh">土台の傾き（T1 slope）</div><div id="eq1"></div></div>
+          <div><div class="eqh">頚椎の上端（C2）の傾き</div><div id="eq2"></div></div>
+          <div><div class="eqh">骨盤：PI は固定、PT と SS で分け合う</div><div id="eq3"></div><div class="pibar" id="pibar"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block">
+      <details>
+        <summary>自分で数値を動かす</summary>
+        <div class="sliders" id="sliders" style="margin-top:14px"></div>
+        <p class="note" style="margin-top:8px">代償スイッチが入っている間、PT と CL は自動で決まります（スライダーは無効になり、決まった値を表示します）。</p>
+      </details>
+    </section>
+
+    <section class="block note">
+      <h3 style="color:var(--ink)">このモデルについて</h3>
+      <ul>
+        <li>側面像の中心線だけを描いた教育用の幾何モデルです。個別症例の評価や診断には使えません。</li>
+        <li>PI・PT・SS・LL・TK・CL は定義どおりの角度を入力にしています。T1 slope は SS − LL + TK（L1 上縁と T12 下縁の傾きが等しいと近似）、TK は T1–T12 相当です。椎体の高さと曲率の配分は平均的な値を仮定しています。</li>
+        <li>判定色の目安：SVA 40/95 mm、PI−LL 10/20°、PT 20/30°（SRS-Schwab 分類）、T1S−CL 15/20°、C2–7 SVA 40/80 mm（頚椎変形分類）。</li>
+        <li>「C7−足部（足関節の真上からのずれ）」「頭を支える曲げモーメント（頭 5 kg）」「視線の下がり（上位頚椎 C0–2 の代償余力 15° を超えた分）」「代償の上限値」は、このモデル独自の簡略化です。股関節の伸展と膝の屈曲は、足首は固定・大腿と下腿は等長・足首の背屈は膝屈曲の35%という単純な脚モデルで表しています（足関節の底背屈、骨盤の側方・回旋は含めません）。</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</div>
+
+<script>
+(() => {
+const R = Math.PI / 180;
+const HIP_Y = 900;
+const G = { d: 110, Ll: 180, Lt: 305, Lc: 85, c7: 8, pl: 4, plate: 17.5, hipTarget: 20, headKg: 5, leg: 450, ankleShare: 0.35 };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const thighTilt = K => K * (1 - G.ankleShare);   // forward tilt of the thigh (deg) for knee flexion K
+
+function integ(p0, len, f, n) {
+  const out = [{ x: p0.x, y: p0.y, phi: f(0) }];
+  let x = p0.x, y = p0.y;
+  for (let i = 1; i <= n; i++) {
+    const phi = f((i - 0.5) / n);
+    x += (len / n) * Math.sin(phi * R);
+    y += (len / n) * Math.cos(phi * R);
+    out.push({ x, y, phi: f(i / n) });
+  }
+  return out;
+}
+
+function geom(P) {
+  const K = P.K || 0;
+  const al = K * G.ankleShare, ga = thighTilt(K);
+  const ankle = { x: 0, y: 0 };
+  const knee = { x: G.leg * Math.sin(al * R), y: G.leg * Math.cos(al * R) };
+  const H = { x: knee.x - G.leg * Math.sin(ga * R), y: knee.y + G.leg * Math.cos(ga * R) };
+  const SS = P.PI - P.PT;
+  const S = { x: H.x - G.d * Math.sin(P.PT * R), y: H.y + G.d * Math.cos(P.PT * R) };
+  const post = { x: S.x - G.plate * Math.cos(SS * R), y: S.y + G.plate * Math.sin(SS * R) };
+  const ant = { x: S.x + G.plate * Math.cos(SS * R), y: S.y - G.plate * Math.sin(SS * R) };
+  const lum = integ(S, G.Ll, s => SS - P.LL * (1 - Math.pow(1 - s, G.pl)), 40);
+  const L1 = lum[lum.length - 1];
+  const tho = integ(L1, G.Lt, s => L1.phi + P.TK * s, 48);
+  const T1 = tho[tho.length - 1];
+  const T1S = T1.phi;
+  const c7 = { x: T1.x + G.c7 * Math.sin(T1S * R), y: T1.y + G.c7 * Math.cos(T1S * R), phi: T1S };
+  const cer = integ(c7, G.Lc, s => T1S - P.CL * s, 24);
+  const C2 = cer[cer.length - 1];
+  const M = T1S - P.CL;
+  const psi = Math.max(0, M - 30);
+  const ucExt = clamp(M - 15, 0, 15);
+  const sp = Math.sin(C2.phi * R), cp = Math.cos(C2.phi * R);
+  const C1 = { x: C2.x + 35 * sp, y: C2.y + 35 * cp };
+  const cs = Math.cos(psi * R), sn = Math.sin(psi * R);
+  const hv = { x: 22 * cs + 62 * sn, y: -22 * sn + 62 * cs };
+  const head = { x: C1.x + hv.x, y: C1.y + hv.y };
+  const m = {
+    PI: P.PI, PT: P.PT, SS, LL: P.LL, TK: P.TK, CL: P.CL, K, T1S, M,
+    SVA: c7.x - post.x, hip: c7.x, c27: C2.x - c7.x, piLL: P.PI - P.LL,
+    psi, ucExt, needCL: T1S - 20, gam: ga,
+    arm: head.x - c7.x,
+    torque: G.headKg * 9.81 * (head.x - c7.x) / 1000,
+  };
+  return { P, SS, H, ankle, knee, S, post, ant, lum, L1, tho, T1, T1S, c7, cer, C2, C1, head, psi, M, m };
+}
+
+// base: {PI,PT,LL,TK,CL,K}; auto:{pelvis,neck,knee}; res:{pelvis: PT cap at K=0, neck: CL cap, knee: K cap}
+function effective(b, auto, res) {
+  const b0 = { ...b, K: b.K || 0 };
+  const off = (PT, K) => geom({ ...b0, PT, K }).m.hip;
+  let PT = b0.PT, K = b0.K;
+  if (auto.pelvis || auto.knee) {
+    const kMax = auto.knee ? Math.max(b0.K, res.knee) : b0.K;
+    let k = b0.K;
+    for (;;) {
+      const cap = auto.pelvis ? Math.max(b0.PT, res.pelvis + thighTilt(k)) : b0.PT;
+      let pt;
+      if (off(b0.PT, k) <= G.hipTarget) pt = b0.PT;
+      else if (off(cap, k) > G.hipTarget) pt = cap;
+      else { let lo = b0.PT, hi = cap; for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (off(mid, k) > G.hipTarget) lo = mid; else hi = mid; } pt = hi; }
+      PT = pt; K = k;
+      if (off(pt, k) <= G.hipTarget || k >= kMax) break;
+      k = Math.min(kMax, k + 1);
+    }
+  }
+  let CL = b0.CL;
+  if (auto.neck) {
+    const T1S = geom({ ...b0, PT, K }).T1S;
+    const want = T1S - 12;
+    CL = clamp(want, b0.CL, Math.max(b0.CL, res.neck));
+    if (want < b0.CL) CL = b0.CL;
+  }
+  return { PI: b0.PI, PT, LL: b0.LL, TK: b0.TK, CL, K };
+}
+if (typeof module !== 'undefined') module.exports = { geom, effective, G };
+
+
+const HEALTHY = { PI: 52, PT: 12, LL: 55, TK: 38, CL: 14, K: 0 };
+const RESV = { pelvis: { good: 38, low: 22 }, neck: { good: 45, low: 16 }, knee: { good: 35, low: 10 } };
+const KEYS = ['PI', 'PT', 'LL', 'TK', 'CL', 'K'];
+const st = { base: { ...HEALTHY }, auto: { pelvis: false, neck: false, knee: false }, resMode: { pelvis: 'good', neck: 'good', knee: 'good' }, caseBase: null, caseMeas: null, caseHip: 0, stripped: false,
+  shown: { ...HEALTHY }, scene: 0, action: 0, showAll: false, progress: 0, playing: false, dirty: true };
+const $ = s => document.querySelector(s);
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const resNow = () => ({ pelvis: RESV.pelvis[st.resMode.pelvis], neck: RESV.neck[st.resMode.neck], knee: RESV.knee[st.resMode.knee] });
+const r0 = v => (Math.round(v) || 0);
+const sg = v => (v >= 0 ? '+' : '−') + Math.abs(Math.round(v));
+
+function apply(p = {}, auto = {}, res = {}) {
+  st.base = { ...HEALTHY, ...p };
+  st.auto = { pelvis: !!auto.pelvis, neck: !!auto.neck, knee: !!auto.knee };
+  st.resMode = { pelvis: res.pelvis || 'good', neck: res.neck || 'good', knee: res.knee || 'good' };
+  st.stripped = false;
+  st.playing = false; syncControls(); st.dirty = true;
+}
+function applyProgress() {
+  const t = st.progress;
+  st.base = { ...HEALTHY, LL: lerp(55, 20, t), TK: lerp(38, 62, t) };
+  st.dirty = true;
+}
+
+/* ---------- scenes ---------- */
+const SCENES = [
+ { tab: '0 全体 SVA', group: 0, title: '0　全体のバランス（SVA：sagittal vertical axis）', overlays: ['sva', 'hip'],
+   lead: '第7頚椎（C7）から真下に下ろした垂線が、仙骨の後上縁よりどれだけ前にずれているかを見ます。体全体が前に倒れているかどうかの指標で、まず最初にここを確認します。',
+   eng: '建物の傾きを、おもり付きの糸（下げ振り）で測るのと同じ考え方です。',
+   watch: ['黒い実線が C7 からの垂線、水色の破線が仙骨後上縁の垂線です。2本の水平距離が SVA です。',
+     '腰の反り（LL）が減ると、上半身が前に倒れて垂線が前へずれます。',
+     '「骨盤で受ける」を押すと、骨盤が後ろに倒れ（PT↑）、C7 が足の真上へ戻ります。ただし SVA は仙骨を基準に測るため、この代償そのものは SVA に映りません。SVA と一緒に PT を見る理由です。'],
+   actions: [
+     { l: '正常な成人', run: () => apply() },
+     { l: '腰が平らになる（LL 55→38°）', run: () => apply({ LL: 38 }) },
+     { l: '＋骨盤で受ける（代償）', run: () => apply({ LL: 38 }, { pelvis: true }) },
+     { l: 'LL 32°：骨盤＋膝で受ける', run: () => apply({ LL: 32 }, { pelvis: true, knee: true }, { pelvis: 'low' }) } ] },
+ { tab: '1 T1 slope と頚椎', group: 1, title: '1　胸椎の上端の傾き（T1 slope）と頚椎とのつり合い（T1 slope − 頚椎前弯角）', overlays: ['cerv', 't1pl'],
+   lead: '頚椎が乗っている「土台」の傾きです。土台が前に傾いていれば、頭を起こすために頚椎は強く反る必要があります。T1 slope と頚椎前弯角の差が大きい場合は、頚椎が土台に見合った形をとれていないと考えます。頚椎の角度を解釈するうえで最も重要な組み合わせです。',
+   eng: '傾いた台に取り付けたモニターアームを想像してください。画面（視線）を水平に保つには、台の傾きと同じ分だけアームを逆向きに曲げる必要があります。',
+   watch: ['左側の扇形が 3 本の線です。T1 上縁（黄）の傾き T1S、C2 の傾き（水色）、その差が CL です。破線の大きな弧が T1S − CL で、C2 が前へ傾く角度に当たります。',
+     '必要な CL の目安は T1S − 20° 以上です。T1S が高いほど、頚椎は強く反り続けなければなりません。',
+     '反りの予備力（上位頚椎を含む）が尽きると、頭を起こしきれず視線が下がります。これが首下がりの方向です。'],
+   actions: [
+     { l: '標準（T1S 約 23°）', run: () => apply() },
+     { l: 'T1S が低い（TK 38→28°）', run: () => apply({ TK: 28 }) },
+     { l: 'T1S が高い（TK 38→66°）', run: () => apply({ TK: 66 }) },
+     { l: '＋頚椎が反って受ける', run: () => apply({ TK: 66 }, { neck: true }) },
+     { l: '＋頚椎が硬くて受けきれない', run: () => apply({ TK: 66 }, { neck: true }, { neck: 'low' }) } ] },
+ { tab: '2 TK と LL', group: 2, title: '2　胸椎後弯（TK）と腰椎前弯（LL）', overlays: ['lum', 'tho'],
+   lead: '背中の丸みと腰の反りです。高齢になると腰の反りが減り、背中が丸くなりやすく、その分を頚椎が代償します。',
+   eng: '直列につながった S 字のバネと考えてください。下のバネ（腰）が伸びると、その傾きは上のバネ（胸・首）へそのまま積み上がります。',
+   watch: ['青い扇形が LL、赤紫の扇形が TK です。扇の開きが角度の大きさです。',
+     'LL が減ると L1 が前へ倒れ、その上の胸椎ごと傾きます。TK が増えると T1 はさらに前へ向きます。',
+     '「胸椎で受ける」は TK を減らして体幹を起こす代償です。上半身は起きますが、腰が平らなままなので重心は前に残ります。'],
+   actions: [
+     { l: '若年（LL 55° / TK 38°）', run: () => apply() },
+     { l: '加齢①：腰の反りが減る（LL 38°）', run: () => apply({ LL: 38 }) },
+     { l: '加齢②：背中も丸くなる（TK 52°）', run: () => apply({ LL: 38, TK: 52 }) },
+     { l: '胸椎で受ける（TK 22°）', run: () => apply({ LL: 38, TK: 22 }) } ] },
+ { tab: '3 骨盤 PI・PT・SS', group: 3, title: '3　骨盤の形と傾き（PI・PT・SS、特に PI − LL）', overlays: ['pel', 'hip'],
+   lead: 'PI（pelvic incidence）は生まれつきの骨盤の形で、その人に「本来必要な腰の反りの量」をほぼ決めます。PI に対して腰椎前弯が足りない（PI − LL が大きい）と、骨盤を後ろに倒す（PT が大きくなる）ことで立位を保っています。この状態は、すでに代償を使っている状態です。',
+   eng: 'PI は部品の寸法で、変えられません。PT は関節の回転角で、こちらだけが調整できます。PI = PT + SS は幾何学の恒等式です。',
+   watch: ['PI は骨盤の形で決まる一定の角度です。PT を増やすと、SS はその分だけ減ります（右下の帯グラフで PI の内訳が動きます）。',
+     '腰椎の上端（L1）を垂直に保つには、LL がおよそ SS（= PI − PT）必要です。PT が小さい人なら LL ≒ PI で釣り合います。',
+     'PI が高い人は大きな LL が必要です。足りない分（PI − LL）は PT で支払うので、PT が上がります。股関節が硬いなど PT を上げられない人は、前に倒れます。',
+     '股関節の伸展が限界でも、膝を曲げると大腿が前へ傾いて骨盤をさらに後ろへ倒せ、腰が足の後ろへ下がって重心が戻ります。代わりに、立っているだけで大腿四頭筋が働き続けます。'],
+   actions: [
+     { l: 'PI が低い（35°）、LL も小さくてよい', run: () => apply({ PI: 35, LL: 38 }) },
+     { l: 'PI が標準（52°）', run: () => apply() },
+     { l: 'PI が高い（75°）＋LL も高い（77°）', run: () => apply({ PI: 75, PT: 10, LL: 77 }) },
+     { l: 'PI が高い（75°）のに LL 不足（52°）', run: () => apply({ PI: 75, PT: 10, LL: 52 }) },
+     { l: '＋骨盤で受ける（PT↑）', run: () => apply({ PI: 75, PT: 10, LL: 52 }, { pelvis: true }) },
+     { l: '＋股関節が硬く PT を上げられない', run: () => apply({ PI: 75, PT: 10, LL: 52 }, { pelvis: true }, { pelvis: 'low' }) },
+     { l: '＋膝を曲げて受ける', run: () => apply({ PI: 75, PT: 10, LL: 52 }, { pelvis: true, knee: true }, { pelvis: 'low' }) } ] },
+ { tab: '4 C2-7 SVA', group: 4, title: '4　頚椎の前方へのずれ（C2-7 SVA）', overlays: ['c27'],
+   lead: '頚椎の中だけで、頭がどれだけ前に出ているかを見ます。',
+   eng: '片持ち梁の先端荷重です。頭は約 5 kg あり、重心が C7 から前に離れるほど、首の後ろの筋が支える曲げモーメントが増えます。',
+   watch: ['2本の破線が C2 と C7 の垂線で、その間隔が C2-7 SVA です。上の矢印は頭の重心までの腕の長さです。',
+     '頚椎前弯が減る、または後弯になると、頚椎全体が前に傾いて頭が前に出ます。',
+     'C2-7 SVA が小さくても安心とは限りません。T1S が高く CL が大きい場合は、頭の位置は保たれても、首の筋は反り続ける仕事を負っています。'],
+   actions: [
+     { l: '標準', run: () => apply() },
+     { l: '頚椎前弯が消える（CL 0°）', run: () => apply({ CL: 0 }) },
+     { l: '頚椎が後弯（CL −20°）', run: () => apply({ CL: -20 }) },
+     { l: 'T1S が高く、頚椎を大きく反らす', run: () => apply({ TK: 66, CL: 42 }) } ] },
+ { tab: '代償の連鎖', group: -1, title: '代償の連鎖（加齢・変性のシミュレーション）', overlays: ['hip', 'sva', 'cerv'],
+   lead: '腰の反りが減り、背中が丸くなっていく変性を少しずつ進めます。足りない分は、まず骨盤、次に頚椎が肩代わりし、両方の予備力が尽きると誤差が表に出てきます。',
+   eng: '直列につながった緩衝器と考えてください。上流（腰）で生じた誤差を下流（骨盤、頚椎）が順に吸収し、どちらも飽和すると外に漏れます。',
+   watch: ['下のスライダー（または再生ボタン）で変性を進めます。', '骨盤の予備力、頚椎の予備力を「低下」にして、どの段階で破綻するかを比べてください。',
+     '骨盤が代償するほど SS が減り、T1S も下がります。骨盤で受けられなくなると、その負担は頚椎へ回ります。'],
+   actions: [], type: 'cascade' },
+ { tab: '症例を入力', group: -1, title: '実症例の数値を入れて再現する', overlays: ['hip', 'sva', 'cerv'], type: 'case',
+   lead: '立位全脊柱側面像などで測った値を入力すると、その症例の姿勢を図に再現します。入力値はすでに代償を使った後の実際の姿勢なので、代償スイッチは自動でオフになります。',
+   eng: '「代償を外してみる」で PT・CL・膝を標準位に戻すと、その症例が代償で隠している前傾の大きさが見えます。',
+   watch: ['必須は PI、PT（または SS）、LL、CL、TK（または T1 slope）です。T1 slope を入れると、T1S が一致するように TK を自動調整します（TK の測定範囲の違いを吸収するため）。',
+     'SVA と C2-7 SVA の実測値を入れると、モデルの値と並べて差を示します。差が大きいときは、椎体長や曲率の配分がこの症例と合っていない可能性があります。',
+     '入力値はこのページの中だけで計算され、送信も保存もされません。'], actions: [] } ];
+
+/* ---------- metrics ---------- */
+const GROUPS = ['全体のバランス（SVA）', 'T1 slope と頚椎のつり合い', '胸椎後弯と腰椎前弯', '骨盤の形と傾き', '頚椎の前方へのずれ', '下肢の代償（股関節・膝）'];
+const lv3 = (a, b) => v => (v < a ? 0 : v <= b ? 1 : 2);
+const METRICS = [
+ { g: 0, k: 'SVA', l: 'SVA（C7 − 仙骨後上縁）', u: 'mm', f: m => m.SVA, lvl: lv3(40, 95), ref: '40 mm 未満が正常、95 mm 超で高度' },
+ { g: 0, k: 'hip', l: 'C7 − 足部（足関節の真上から）', u: 'mm', f: m => m.hip, lvl: v => (Math.abs(v) <= 40 ? 0 : Math.abs(v) <= 80 ? 1 : 2), ref: '±40 mm 以内が目安' },
+ { g: 1, k: 'T1S', l: 'T1 slope', u: '°', f: m => m.T1S, ref: '個人差が大きい（25° 前後）' },
+ { g: 1, k: 'CL', l: '頚椎前弯角 CL（C2–7）', u: '°', f: m => m.CL, ref: '土台に見合う量が必要' },
+ { g: 1, k: 'M', l: 'T1S − CL', u: '°', f: m => m.M, lvl: lv3(14.99, 20), ref: '15° 未満が正常、20° 超でミスマッチ' },
+ { g: 1, k: 'needCL', l: '必要な CL の目安（T1S − 20°）', u: '°', f: m => m.needCL, lvl: v => (st.shown.CL >= v ? 0 : 2), txt: ['CL 足りている', '', 'CL 不足'], ref: 'CL がこれ以上あれば T1S − CL ≦ 20°' },
+ { g: 2, k: 'TK', l: '胸椎後弯 TK（T1–T12）', u: '°', f: m => m.TK, ref: '加齢で増えやすい' },
+ { g: 2, k: 'LL', l: '腰椎前弯 LL', u: '°', f: m => m.LL, ref: '加齢で減りやすい' },
+ { g: 3, k: 'PI', l: 'PI（骨盤の形・固定）', u: '°', f: m => m.PI, ref: '平均 約 52°（個人差大）' },
+ { g: 3, k: 'PT', l: 'PT（骨盤の後傾）', u: '°', f: m => m.PT, lvl: lv3(19.99, 30), ref: '20° 未満が正常、30° 超で高度' },
+ { g: 3, k: 'SS', l: 'SS（仙骨の傾き）', u: '°', f: m => m.SS, ref: 'PI = PT + SS' },
+ { g: 3, k: 'piLL', l: 'PI − LL', u: '°', f: m => m.piLL, lvl: lv3(9.99, 20), ref: '10° 未満が正常、20° 超で高度' },
+ { g: 5, k: 'hipExt', l: '股関節の伸展（代償分）', u: '°', f: m => Math.max(0, m.PT - HEALTHY.PT - m.gam), ref: 'PT − 12° − 大腿の前傾' },
+ { g: 5, k: 'K', l: '膝屈曲', u: '°', f: m => m.K, lvl: lv3(4.99, 15), txt: ['使っていない', '軽度', '使用'], ref: '立位で膝を曲げるほど筋疲労が大きい' },
+ { g: 4, k: 'c27', l: 'C2-7 SVA', u: 'mm', f: m => m.c27, lvl: lv3(40, 80), ref: '40 mm 未満が正常' },
+ { g: 4, k: 'psi', l: '視線の下がり（モデル）', u: '°', f: m => m.psi, lvl: v => (v < 1 ? 0 : v < 5 ? 1 : 2), txt: ['水平視を保てる', '', '首下がりの方向'], ref: 'C0–2 の余力 15° を超えた分' },
+ { g: 4, k: 'torque', l: '頭を支える曲げモーメント', u: 'N·m', f: m => m.torque, d: 1, ref: '頭 5 kg × C7 から重心までの距離' } ];
+const CHIP = ['正常', '注意', '逸脱'];
+
+/* ---------- build static UI ---------- */
+const tabs = $('#tabs'), sceneEl = $('#scene'), metricsEl = $('#metrics');
+SCENES.forEach((s, i) => {
+  const b = document.createElement('button'); b.className = 'tab'; b.role = 'tab'; b.textContent = s.tab; b.id = 'tab' + i;
+  b.addEventListener('click', () => setScene(i)); tabs.appendChild(b);
+});
+GROUPS.forEach((gname, gi) => {
+  const d = document.createElement('div'); d.className = 'grp'; d.dataset.g = gi;
+  d.innerHTML = `<h3><span>${gi}</span>${gname}</h3><div class="tiles">` + METRICS.filter(m => m.g === gi).map(m =>
+    `<div class="tile"><div class="tl">${m.l}</div><div class="tv"><span id="v-${m.k}">0</span><small>${m.u}</small></div><div class="tr">${m.ref}</div><span class="chip" id="c-${m.k}" hidden></span></div>`).join('') + '</div>';
+  metricsEl.appendChild(d);
+});
+const SL = [['PI', 'PI（骨盤の形）', 25, 90], ['PT', 'PT（骨盤の後傾）', 0, 50], ['LL', 'LL（腰椎前弯）', 0, 85], ['TK', 'TK（胸椎後弯）', 5, 80], ['CL', 'CL（頚椎前弯）', -25, 55], ['K', 'K（膝屈曲）', 0, 45]];
+$('#sliders').innerHTML = SL.map(([k, l, a, b]) => `<div class="srow"><label for="sl-${k}">${l}</label><input type="range" id="sl-${k}" min="${a}" max="${b}" step="1"><output id="so-${k}"></output></div>`).join('');
+SL.forEach(([k]) => $('#sl-' + k).addEventListener('input', e => { st.base[k] = +e.target.value; st.playing = false; st.dirty = true; }));
+
+const cfield = (id, l, ph) => `<label class="cf"><span>${l}</span><input type="number" step="any" inputmode="decimal" id="cs-${id}" placeholder="${ph || ''}"></label>`;
+function setScene(i) {
+  st.scene = i; st.action = 0; const s = SCENES[i];
+  tabs.querySelectorAll('.tab').forEach((t, j) => t.setAttribute('aria-selected', j === i ? 'true' : 'false'));
+  const wl = `<ul>${s.watch.map(w => `<li>${w}</li>`).join('')}</ul>`;
+  let h = `<h2>${s.title}</h2><p>${s.lead}</p><p class="eng">${s.eng}</p>`;
+  if (s.actions.length) h += `<div class="actions" id="acts">${s.actions.map((a, j) => `<button class="btn" data-j="${j}" aria-pressed="false">${a.l}</button>`).join('')}</div>` + wl;
+  else if (s.type === 'cascade') h += wl + `<div class="progress"><div class="actions"><button class="btn" id="play">▶ 再生</button><button class="btn" id="reset">最初に戻す</button></div>
+    <label for="prog" style="font-size:13px;color:var(--muted)">変性の進行：<b id="progT" style="color:var(--ink)">0%</b>（LL 55→20°、TK 38→62°）</label>
+    <input type="range" id="prog" min="0" max="100" step="1" value="0">
+    <div class="stages" id="stages"><div class="stg"><b>① 骨盤が受ける</b>PT が上がる</div><div class="stg"><b>② 骨盤が限界</b>体幹が前へ残る</div><div class="stg"><b>③ 頚椎が受ける</b>CL が上がる</div><div class="stg"><b>④ 頚椎も限界</b>視線が下がる</div></div></div>`;
+  else h += wl + `<div class="cgrid">${cfield('PI', 'PI (°)')}${cfield('PT', 'PT (°)')}${cfield('SS', 'SS (°)・PT が空のとき')}${cfield('LL', 'LL (°)')}${cfield('TK', 'TK (°)')}${cfield('T1S', 'T1 slope (°)・任意')}${cfield('CL', 'CL C2–7 (°)・前弯が正')}${cfield('K', '膝屈曲 (°)・任意')}${cfield('SVA', 'SVA 実測 (mm)・任意')}${cfield('C27', 'C2-7 SVA 実測 (mm)・任意')}</div>
+    <div class="actions"><button class="btn" id="cs-go">この症例を再現</button><button class="btn" id="cs-strip">代償を外してみる</button><button class="btn" id="cs-back">元の症例に戻す</button><button class="btn" id="cs-sample">サンプル症例を入れる</button></div>
+    <p class="note" id="cs-msg"></p><table class="cmp" id="cs-cmp" hidden></table>`;
+  sceneEl.innerHTML = h;
+  if (s.actions.length) {
+    sceneEl.querySelectorAll('#acts .btn').forEach(b => b.addEventListener('click', () => { st.action = +b.dataset.j; s.actions[st.action].run(); }));
+    s.actions[0].run();
+  } else if (s.type === 'cascade') {
+    st.progress = 0; apply({}, { pelvis: true, neck: true }); applyProgress();
+    $('#prog').addEventListener('input', e => { st.progress = e.target.value / 100; st.playing = false; applyProgress(); updProg(); });
+    $('#play').addEventListener('click', () => { if (st.progress >= 1) { st.progress = 0; } st.playing = !st.playing; updProg(); });
+    $('#reset').addEventListener('click', () => { st.progress = 0; st.playing = false; applyProgress(); updProg(); });
+  } else {
+    if (st.caseBase) { apply(); st.base = { ...st.caseBase }; } else apply();
+    $('#cs-go').addEventListener('click', applyCase);
+    $('#cs-strip').addEventListener('click', () => { if (!st.caseBase) return; const c = st.caseBase; st.base = { ...c, PT: Math.min(c.PT, HEALTHY.PT), CL: Math.min(c.CL, HEALTHY.CL), K: 0 }; st.auto = { pelvis: false, neck: false, knee: false }; st.stripped = true; syncControls(); st.dirty = true; });
+    $('#cs-back').addEventListener('click', () => { if (!st.caseBase) return; st.base = { ...st.caseBase }; st.stripped = false; st.dirty = true; });
+    $('#cs-sample').addEventListener('click', () => { const v = { PI: 58, PT: 30, LL: 30, TK: '', T1S: 36, CL: 14, K: 10, SVA: 110, C27: 40, SS: '' }; for (const k in v) $('#cs-' + k).value = v[k]; applyCase(); });
+  }
+  document.querySelectorAll('.grp').forEach(g => { const gi = +g.dataset.g, on = s.group === -1 || gi === s.group || (s.group === 3 && gi === 5); g.classList.toggle('act', s.group !== -1 && on); g.classList.toggle('dim', !on); });
+  syncControls(); st.dirty = true;
+}
+const num = id => { const v = $('#cs-' + id).value; return v === '' ? null : +v; };
+function applyCase() {
+  const PI = num('PI'), PTi = num('PT'), SSi = num('SS'), LL = num('LL'), TKi = num('TK'), T1Si = num('T1S'), CL = num('CL'), K = num('K') || 0, msg = $('#cs-msg');
+  const PT = PTi != null ? PTi : (SSi != null && PI != null ? PI - SSi : null);
+  if ([PI, PT, LL, CL].some(v => v == null) || (TKi == null && T1Si == null)) { msg.textContent = 'PI、PT（または SS）、LL、CL、TK（または T1 slope）を入力してください。'; return; }
+  const SS = PI - PT, TK = T1Si != null ? T1Si - SS + LL : TKi;
+  let note = `SS ${r0(SS)}°。`;
+  if (T1Si != null) note += ` T1 slope に合わせてモデルの TK を ${r0(TK)}° に設定しました${TKi != null ? `（入力 TK ${r0(TKi)}° との差 ${r0(TK - TKi)}°は、計測範囲や定義の違いに当たります）` : ''}。`;
+  if (TK < 0 || TK > 100 || PT < 0 || PT > 60) note += ' 値が通常の範囲外です。入力を確認してください。';
+  msg.textContent = note;
+  st.caseBase = { PI, PT, LL, TK, CL, K }; st.caseMeas = { SVA: num('SVA'), C27: num('C27') }; st.caseHip = geom(st.caseBase).m.hip;
+  st.base = { ...st.caseBase }; st.auto = { pelvis: false, neck: false, knee: false }; st.playing = false; st.stripped = false;
+  syncControls(); st.dirty = true;
+}
+function updProg() {
+  const p = $('#prog'); if (!p) return; p.value = Math.round(st.progress * 100); $('#progT').textContent = Math.round(st.progress * 100) + '%';
+  $('#play').textContent = st.playing ? '❚❚ 一時停止' : '▶ 再生';
+}
+function syncControls() {
+  $('#swPel').setAttribute('aria-checked', st.auto.pelvis); $('#swNeck').setAttribute('aria-checked', st.auto.neck); $('#swKnee').setAttribute('aria-checked', st.auto.knee);
+  $('#segKnee').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === st.resMode.knee));
+  $('#segPel').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === st.resMode.pelvis));
+  $('#segNeck').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === st.resMode.neck));
+  sceneEl.querySelectorAll('#acts .btn').forEach((b, j) => b.setAttribute('aria-pressed', j === st.action));
+}
+$('#swPel').addEventListener('click', () => { if (st.auto.pelvis) st.base.PT = st.shown.PT; st.auto.pelvis = !st.auto.pelvis; syncControls(); st.dirty = true; });
+$('#swKnee').addEventListener('click', () => { if (st.auto.knee) st.base.K = st.shown.K; st.auto.knee = !st.auto.knee; syncControls(); st.dirty = true; });
+$('#segKnee').addEventListener('click', e => { const v = e.target.dataset.v; if (v) { st.resMode.knee = v; syncControls(); st.dirty = true; } });
+$('#swNeck').addEventListener('click', () => { if (st.auto.neck) st.base.CL = st.shown.CL; st.auto.neck = !st.auto.neck; syncControls(); st.dirty = true; });
+$('#segPel').addEventListener('click', e => { const v = e.target.dataset.v; if (v) { st.resMode.pelvis = v; syncControls(); st.dirty = true; } });
+$('#segNeck').addEventListener('click', e => { const v = e.target.dataset.v; if (v) { st.resMode.neck = v; syncControls(); st.dirty = true; } });
+$('#showAll').addEventListener('change', e => { st.showAll = e.target.checked; st.dirty = true; });
+
+/* ---------- SVG helpers (world: mm, x forward, y up) ---------- */
+const dyn = $('#dyn');
+const Yf = y => 1800 - y;
+const f1 = v => v.toFixed(1);
+const pt = p => f1(p.x) + ',' + f1(Yf(p.y));
+const line = (a, b, c) => `<line class="${c}" x1="${f1(a.x)}" y1="${f1(Yf(a.y))}" x2="${f1(b.x)}" y2="${f1(Yf(b.y))}"/>`;
+const txt = (p, s, c, an = 'start') => `<text class="${c}" x="${f1(p.x)}" y="${f1(Yf(p.y))}" text-anchor="${an}">${s}</text>`;
+const dirv = deg => ({ x: Math.cos(deg * R), y: Math.sin(deg * R) });
+const add = (p, v, k = 1) => ({ x: p.x + v.x * k, y: p.y + v.y * k });
+const ray = (o, deg, len, c) => line(o, add(o, dirv(deg), len), c);
+function arc(c, r, a0, a1, cls) {
+  if (Math.abs(a1 - a0) < 0.05) return '';
+  const p0 = add(c, dirv(a0), r), p1 = add(c, dirv(a1), r);
+  return `<path class="${cls}" d="M${pt(p0)} A${r} ${r} 0 ${Math.abs(a1 - a0) > 180 ? 1 : 0} ${a1 > a0 ? 0 : 1} ${pt(p1)}"/>`;
+}
+const aDir = phi => ({ x: Math.cos(phi * R), y: -Math.sin(phi * R) });   // anterior direction at tilt phi
+const plate = (p, phi, half, cls) => line(add(p, aDir(phi), -half), add(p, aDir(phi), half), cls);
+function bodyAt(path, s) {
+  const n = path.length - 1, f = s * n, i = Math.min(n - 1, Math.floor(f)), t = f - i, a = path[i], b = path[i + 1];
+  return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), phi: lerp(a.phi, b.phi, t) };
+}
+function arrowHead(tip, dir) { return `<polygon class="dimh" points="${pt(tip)} ${pt({ x: tip.x - dir * 18, y: tip.y + 7 })} ${pt({ x: tip.x - dir * 18, y: tip.y - 7 })}"/>`; }
+function dim(y, x1, x2, label, cls) {
+  let s = line({ x: x1, y: y - 16 }, { x: x1, y: y + 16 }, 'dim') + line({ x: x2, y: y - 16 }, { x: x2, y: y + 16 }, 'dim') + line({ x: x1, y }, { x: x2, y }, 'dim');
+  const d = Math.sign(x2 - x1) || 1;
+  if (Math.abs(x2 - x1) > 44) s += arrowHead({ x: x2, y }, d) + arrowHead({ x: x1, y }, -d);
+  const xr = Math.max(x1, x2);
+  return s + (xr > 250 ? txt({ x: Math.min(x1, x2) - 14, y: y - 8 }, label, cls, 'end') : txt({ x: xr + 14, y: y - 8 }, label, cls));
+}
+function interp(k, u) {
+  if (u <= k[0][0]) return k[0][1];
+  for (let i = 1; i < k.length; i++) if (u <= k[i][0]) return lerp(k[i - 1][1], k[i][1], (u - k[i - 1][0]) / (k[i][0] - k[i - 1][0]));
+  return k[k.length - 1][1];
+}
+const WA = [[-.12, 62], [0, 62], [.15, 86], [.31, 92], [.55, 108], [.80, 96], [.85, 52], [.9, 38], [1, 36]];
+const WP = [[-.12, 60], [0, 55], [.15, 48], [.31, 45], [.55, 58], [.80, 60], [.85, 44], [.9, 32], [1, 30]];
+
+function torso(g) {
+  const p0 = g.lum[0], path = [{ x: g.S.x - 70 * Math.sin(p0.phi * R), y: g.S.y - 70 * Math.cos(p0.phi * R), phi: p0.phi, u: -.12 }];
+  g.lum.forEach((p, i) => path.push({ ...p, u: i / (g.lum.length - 1) * .311 }));
+  g.tho.forEach((p, i) => { if (i) path.push({ ...p, u: .311 + i / (g.tho.length - 1) * .528 }); });
+  g.cer.forEach((p, i) => path.push({ ...p, u: .853 + i / (g.cer.length - 1) * .147 }));
+  const A = [], B = [];
+  for (const p of path) { const a = aDir(p.phi); A.push(add(p, a, interp(WA, p.u))); B.push(add(p, a, -interp(WP, p.u))); }
+  return `<polygon class="torso" stroke-linejoin="round" points="${[...A, ...B.reverse()].map(pt).join(' ')}"/>`;
+}
+function headSvg(g) {
+  const cx = g.head.x, cy = Yf(g.head.y), c = Math.cos(g.psi * R), s = Math.sin(g.psi * R);
+  const ex = cx + 52 * c + 18 * s, ey = cy + 52 * s - 18 * c;
+  return `<line class="ref" x1="${f1(ex)}" y1="${f1(ey)}" x2="${f1(ex + 190)}" y2="${f1(ey)}"/>
+  <g transform="translate(${f1(cx)} ${f1(cy)}) rotate(${f1(g.psi)})"><ellipse class="headc" rx="88" ry="110"/>
+  <path class="nose" d="M84,-4 L112,22 L84,28 Z"/><circle class="eye" cx="52" cy="-18" r="6"/>
+  <line class="gaze" x1="62" y1="-18" x2="230" y2="-18"/></g>`;
+}
+function smoothClosed(P) {
+  const n = P.length, mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  let d = 'M' + pt(mid(P[n - 1], P[0]));
+  for (let i = 0; i < n; i++) d += ' Q' + pt(P[i]) + ' ' + pt(mid(P[i], P[(i + 1) % n]));
+  return d + 'Z';
+}
+function pelvisSvg(g) {
+  const { PI, PT } = g.P, d = G.d, S0 = { x: 0, y: d };
+  const n = { x: Math.sin(PI * R), y: Math.cos(PI * R) }, pd = { x: -Math.cos(PI * R), y: Math.sin(PI * R) };
+  const A = add(S0, pd, 20), B = add(S0, pd, -20), C = add(add(S0, n, -108), pd, -10);
+  const pts = [A, C, { x: -34, y: -80 }, { x: 70, y: -52 }, { x: 62, y: 80 }, B].map(p => {
+    const x = p.x * Math.cos(PT * R) - p.y * Math.sin(PT * R), y = p.x * Math.sin(PT * R) + p.y * Math.cos(PT * R);
+    return { x: x + g.H.x, y: y + g.H.y };
+  });
+  return `<path class="pelvis" d="${smoothClosed(pts)}"/>`;
+}
+const LVL = { lum: [5, 38, 27, 'vb vb-lum'], tho: [12, 28, 19, 'vb vb-tho'] };
+function body(c, w, h, cls) {
+  const t = { x: Math.sin(c.phi * R), y: Math.cos(c.phi * R) }, a = aDir(c.phi);
+  const P = [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([i, j]) => ({ x: c.x + i * w / 2 * a.x + j * h / 2 * t.x, y: c.y + i * w / 2 * a.y + j * h / 2 * t.y }));
+  return `<polygon class="${cls}" points="${P.map(pt).join(' ')}"/>` + line(add(c, a, -w / 2), add(c, a, -(w / 2 + w * .55 + 8)), 'spin');
+}
+function vertebrae(g) {
+  let s = '';
+  for (let i = 0; i < 5; i++) s += body(bodyAt(g.lum, (i + .5) / 5), 38, 27, LVL.lum[3]);
+  for (let i = 0; i < 12; i++) s += body(bodyAt(g.tho, (i + .5) / 12), 28, 19, LVL.tho[3]);
+  for (let i = 0; i < 6; i++) s += body(bodyAt(g.cer, i / 5), 17, 13, 'vb vb-cer');
+  const tag = (p, name, off) => txt(add(p, aDir(p.phi), -off), name, 'vl', 'end');
+  return s + tag({ ...g.S, phi: g.SS }, 'S1', 76) + tag(g.L1, 'L1', 68) + tag(g.c7, 'C7', 52) + tag(g.C2, 'C2', 50);
+}
+
+function overlays(g, set) {
+  const m = g.m, has = k => set.has(k), BOT = 280;
+  let s = '';
+  if (has('hip') || has('sva') || has('c27')) s += line({ x: g.c7.x, y: BOT }, { x: g.c7.x, y: has('c27') ? g.head.y + 160 : g.c7.y }, has('c27') ? 'ref2' : 'plumb');
+  if (has('hip')) s += line({ x: 0, y: BOT }, { x: 0, y: 1790 }, 'ref') + dim(612, 0, g.c7.x, `C7−足部 ${sg(m.hip)} mm`, 'lb f-ink');
+  if (has('sva')) s += line({ x: g.post.x, y: BOT }, { x: g.post.x, y: g.post.y + 40 }, 'ref2') + dim(704, g.post.x, g.c7.x, `SVA ${sg(m.SVA)} mm`, 'lb f-acc');
+  if (has('c27')) {
+    s += line({ x: g.C2.x, y: g.c7.y - 70 }, { x: g.C2.x, y: g.C2.y + 120 }, 'ref2');
+    s += dim(g.c7.y - 60, g.c7.x, g.C2.x, `C2-7 SVA ${sg(m.c27)} mm`, 'lb f-acc');
+    const y = g.head.y + 160;
+    s += line({ x: g.head.x, y }, { x: g.head.x, y: g.head.y }, 'ref') + dim(y, g.c7.x, g.head.x, `頭の腕 ${r0(m.arm)} mm → ${m.torque.toFixed(1)} N·m`, 'lb f-ink');
+  }
+  if (has('cerv')) {
+    const O = { x: -215, y: g.c7.y + 20 };
+    s += line(O, { x: g.c7.x - 55, y: g.c7.y }, 'ref') + ray(O, 0, 125, 'ref');
+    s += ray(O, -g.T1S, 125, 's-t1 thin') + ray(O, -g.M, 125, 's-cer thin');
+    s += arc(O, 46, 0, -g.T1S, 's-t1') + arc(O, 72, -g.T1S, -g.M, 's-cer') + arc(O, 98, 0, -g.M, 's-ink dsh');
+    s += txt({ x: O.x - 14, y: O.y + 44 }, `T1S ${r0(g.T1S)}°`, 'lb f-t1', 'end') + txt({ x: O.x - 14, y: O.y + 14 }, `CL ${r0(g.P.CL)}°`, 'lb f-cer', 'end') + txt({ x: O.x - 14, y: O.y - 16 }, `T1S−CL ${r0(g.M)}°`, 'lb f-ink', 'end');
+  }
+  if (has('t1pl')) s += txt(add(g.T1, aDir(g.T1S), -62), 'T1', 'vl', 'end') + plate(g.T1, g.T1S, 36, 's-t1 hl') + plate(g.C2, g.M, 26, 's-cer hl');
+  if (has('lum')) {
+    const O = { x: -215, y: g.lum[20].y }, a0 = -g.SS, a1 = -g.L1.phi;
+    s += plate({ ...g.S }, g.SS, 36, 's-lum hl') + plate(g.L1, g.L1.phi, 36, 's-lum hl') + line(O, { x: g.lum[20].x - 60, y: O.y }, 'ref');
+    s += ray(O, a0, 120, 's-lum thin') + ray(O, a1, 120, 's-lum thin') + arc(O, 62, a0, a1, 's-lum') + txt({ x: O.x - 14, y: O.y - 8 }, `LL ${r0(g.P.LL)}°`, 'lb f-lum', 'end');
+  }
+  if (has('tho')) {
+    const O = { x: -215, y: g.tho[24].y }, a0 = -g.L1.phi, a1 = -g.T1S;
+    s += plate(g.T1, g.T1S, 36, 's-tho hl') + plate(g.L1, g.L1.phi, 36, 's-tho hl') + line(O, { x: g.tho[24].x - 70, y: O.y }, 'ref');
+    s += ray(O, a0, 120, 's-tho thin') + ray(O, a1, 120, 's-tho thin') + arc(O, 62, a0, a1, 's-tho') + txt({ x: O.x - 14, y: O.y - 8 }, `TK ${r0(g.P.TK)}°`, 'lb f-tho', 'end');
+  }
+  if (has('pel')) {
+    const { S, H, SS } = g, PT = g.P.PT, nrm = { x: Math.sin(SS * R), y: Math.cos(SS * R) };
+    const angN = Math.atan2(-nrm.y, -nrm.x) / R, angH = Math.atan2(H.y - S.y, H.x - S.x) / R;
+    s += line(g.post, g.ant, 's-pel hl') + line(S, add(S, nrm, -135), 's-pel thin dsh') + line(S, H, 's-pel');
+    s += ray(S, 0, 105, 'ref') + ray(S, -SS, 105, 's-pel thin dsh') + arc(S, 92, 0, -SS, 's-pel');
+    s += arc(S, 56, angN, angH, 's-pel') + txt(add(S, dirv((angN + angH) / 2), 88), `PI ${r0(g.P.PI)}°`, 'lb f-pel', 'end');
+    s += txt(add(S, dirv(-SS / 2), 100), `SS ${r0(SS)}°`, 'lb f-pel');
+    s += line(H, { x: H.x, y: H.y + 175 }, 'ref') + arc(H, 150, 90, 90 + PT, 's-pel' + (PT - st.base.PT > 2 ? ' march' : ''));
+    s += txt(add(H, dirv(90 + PT / 2), 178), `PT ${r0(PT)}°`, 'lb f-pel', 'end');
+  }
+  return s;
+}
+const hipSvg = g => `<circle class="hipc" cx="${f1(g.H.x)}" cy="${f1(Yf(g.H.y))}" r="26"/>`;
+const limbLine = (p, q, c, w) => `<line class="${c}" style="stroke-width:${w}px" x1="${f1(p.x)}" y1="${f1(Yf(p.y))}" x2="${f1(q.x)}" y2="${f1(Yf(q.y))}"/>`;
+function legs(g) {
+  return limbLine(g.H, g.knee, 'limbo', 112) + limbLine(g.knee, g.ankle, 'limbo', 100) + limbLine(g.H, g.knee, 'limb', 106) + limbLine(g.knee, g.ankle, 'limb', 94)
+    + `<circle cx="${f1(g.knee.x)}" cy="${f1(Yf(g.knee.y))}" r="9" style="fill:var(--body-line)"/>`;
+}
+
+function drawFigure(g) {
+  const set = new Set(SCENES[st.scene].overlays);
+  if (st.showAll) ['sva', 'hip', 'cerv', 'lum', 'tho', 'pel', 'c27'].forEach(k => set.add(k));
+  const bot = 520 - 240 * Math.min(1, g.m.K / 6);
+  $('#fig').setAttribute('viewBox', `-375 0 860 ${f1(1800 - bot)}`);
+  dyn.innerHTML = legs(g) + torso(g) + headSvg(g) + pelvisSvg(g) + hipSvg(g) + vertebrae(g) + overlays(g, set)
+    + txt({ x: -365, y: bot + 20 }, '◀ 後方', 'vl') + txt({ x: 475, y: bot + 20 }, '前方 ▶', 'vl', 'end');
+}
+
+/* ---------- tilt profile ---------- */
+const prof = $('#prof'), PX = phi => 30 + (phi + 30) * 2.2, PY = u => 318 - u * 290;
+function drawProfile(g) {
+  const seg = (path, u0, u1, cls) => `<polyline class="${cls}" points="${path.map((p, i) => `${f1(PX(p.phi))},${f1(PY(u0 + (u1 - u0) * i / (path.length - 1)))}`).join(' ')}"/>`;
+  let s = '';
+  for (const a of [-20, 0, 20, 40, 60]) s += `<line x1="${PX(a)}" y1="${PY(0) + 6}" x2="${PX(a)}" y2="${PY(1) - 8}" stroke="var(--line)" stroke-width="${a === 0 ? 2 : 1}"/><text class="axl" x="${PX(a)}" y="${PY(0) + 20}" text-anchor="middle">${a}°</text>`;
+  s += `<text class="axl" x="${PX(0) + 4}" y="${PY(1) - 12}">垂直</text><text class="axl" x="262" y="${PY(0) + 34}" text-anchor="end">前傾 →</text><text class="axl" x="8" y="${PY(0) + 34}">← 後傾</text>`;
+  s += seg(g.lum, 0, .311, 's-lum') + seg(g.tho, .311, .839, 's-tho') + seg(g.cer, .853, 1, 's-cer');
+  const dot = (phi, u, cls, lab, an) => `<circle cx="${f1(PX(phi))}" cy="${f1(PY(u))}" r="4.5" style="fill:var(--surface);stroke:var(--${cls});stroke-width:2.5"/><text class="axl" style="fill:var(--${cls});font-weight:600;font-size:11.5px" x="${f1(PX(phi) + (an === 'end' ? -8 : 8))}" y="${f1(PY(u) + 4)}" text-anchor="${an}">${lab}</text>`;
+  s += dot(g.SS, 0, 'c-pel', `S1 ${r0(g.SS)}°`, 'start') + dot(g.L1.phi, .311, 'c-lum', `L1 ${r0(g.L1.phi)}°`, g.L1.phi > 25 ? 'end' : 'start') + dot(g.T1S, .839, 'c-t1', `T1 ${r0(g.T1S)}°`, g.T1S > 40 ? 'end' : 'start') + dot(g.M, 1, 'c-cer', `C2 ${r0(g.M)}°`, g.M > 40 ? 'end' : 'start');
+  prof.innerHTML = s;
+}
+
+/* ---------- narrator ---------- */
+function narrate(g) {
+  const m = g.m, b = st.base, res = resNow();
+  switch (st.scene) {
+    case 0:
+      if (Math.abs(m.hip) > 80) return `C7 の垂線は足の真上より ${r0(m.hip)} mm 前にあります。体幹が前に倒れ、このままでは立っていられません（SVA ${r0(m.SVA)} mm）。`;
+      if (m.PT - b.PT >= 4) return `骨盤を ${r0(m.PT - b.PT)}° 後ろに倒し（PT ${r0(m.PT)}°）、C7 を足の真上（${sg(m.hip)} mm）へ戻しています。それでも SVA は ${r0(m.SVA)} mm。仙骨が後ろへ動いた分は SVA に映りません。`;
+      return `C7 の垂線は足関節から ${sg(m.hip)} mm、SVA は ${r0(m.SVA)} mm です。${m.SVA < 40 ? '正常範囲で、骨盤の代償も使っていません。' : '前方へずれています。'}`;
+    case 1: {
+      let t = `T1S ${r0(m.T1S)}° − CL ${r0(m.CL)}° = ${r0(m.M)}°。`;
+      t += m.M <= 20 ? '頚椎は土台に見合った形です。' : m.psi < 1 ? '前弯が土台に対して不足し、上位頚椎（C0–2）を反らせて水平視を保っています。' : `上位頚椎の余力も尽き、視線が ${r0(m.psi)}° 下がっています。首下がりの方向です。`;
+      if (m.CL - b.CL >= 4) t += ` 頚椎を ${r0(m.CL)}° まで反らせて受けており、後ろの筋は働き続けます。`;
+      if (st.auto.neck && m.CL >= res.neck - .5 && m.M > 20) t += ' 頚椎の予備力が上限です。';
+      return t;
+    }
+    case 2: return `T1S ${r0(m.T1S)}° = SS ${r0(m.SS)}° − LL ${r0(m.LL)}° + TK ${r0(m.TK)}°。腰で減った分と背中で増えた分が、そのまま頚椎の土台の傾きになります（C7−足部 ${sg(m.hip)} mm）。`;
+    case 3: {
+      let t = `PI ${r0(m.PI)}° = PT ${r0(m.PT)}° + SS ${r0(m.SS)}°。PI − LL = ${r0(m.piLL)}°。`;
+      t += m.piLL >= 10 ? ` 足りない分を骨盤の後傾（PT ${r0(m.PT)}°）で支払っている状態です。` : ' 腰の反りが PI に見合っていて、骨盤の代償は要りません。';
+      if (st.auto.pelvis && m.PT >= res.pelvis + m.gam - .5 && m.hip > 40) t += ' 骨盤の予備力が上限で、体幹が前に残っています。';
+      return t;
+    }
+    case 4: return `C2-7 SVA ${sg(m.c27)} mm。頭（約 5 kg）の重心は C7 の ${r0(m.arm)} mm 前で、首の後ろの筋は約 ${m.torque.toFixed(1)} N·m を支えます。` + (m.M > 20 && m.c27 < 40 ? ' 頭の位置は保たれていますが、頚椎は強く反って支えています。' : '');
+    default: {
+      const pOn = m.PT - HEALTHY.PT >= 3, pMax = st.auto.pelvis && m.PT >= res.pelvis + m.gam - .5 && m.hip > 25, cOn = m.CL - HEALTHY.CL >= 3, cMax = m.M > 20;
+      if (m.psi >= 1) return `骨盤も頚椎も限界です。視線が ${r0(m.psi)}° 下がり（首下がりの方向）、C7 は足関節から ${sg(m.hip)} mm にあります。`;
+      if (cMax) return `頚椎の予備力が足りず、T1S − CL が ${r0(m.M)}° に開きました。上位頚椎で水平視を保っている段階です。`;
+      if (pMax) return `骨盤が上限（PT ${r0(m.PT)}°）です。受けきれない分で C7 が足関節から ${sg(m.hip)} mm まで前へ出ています。`;
+      if (cOn) return `骨盤（PT ${r0(m.PT)}°）で体幹を支えたうえで、頚椎も ${r0(m.CL)}° まで反って頭を起こしています。`;
+      if (pOn) return `腰の反りが減った分を、骨盤が後ろへ倒れて（PT ${r0(m.PT)}°）受けています。外見上のバランスは保たれています。`;
+      return '代償を使わなくても釣り合っている状態です。スライダーを右へ動かして変性を進めてください。';
+    }
+    case 6: {
+      if (!st.caseBase) return '数値を入力して「この症例を再現」を押してください。サンプル症例も入れられます。';
+      let t = `再現中：C7 は足関節から ${sg(m.hip)} mm、SVA ${r0(m.SVA)} mm、PT ${r0(m.PT)}°` + (m.K >= 3 ? `、膝屈曲 ${r0(m.K)}°` : '') + '。';
+      if (st.stripped) t += ` 代償（PT・CL・膝）を外すと、C7 は ${r0(m.hip - st.caseHip)} mm さらに前へ出ます。`;
+      else if (m.PT - HEALTHY.PT >= 8 || m.K >= 5) t += ' すでに骨盤・膝の代償を使っています。「代償を外してみる」で、隠れている前傾の大きさを確認できます。';
+      return t;
+    }
+  }
+}
+
+/* ---------- per-frame render ---------- */
+const cache = {};
+function setText(el, v) { if (cache[el.id] !== v) { cache[el.id] = v; el.textContent = v; } }
+function render() {
+  const g = geom(st.shown), m = g.m, res = resNow();
+  drawFigure(g); drawProfile(g);
+  for (const mt of METRICS) {
+    const v = mt.f(m); setText($('#v-' + mt.k), mt.d ? v.toFixed(mt.d) : String(r0(v)));
+    if (mt.lvl) { const L = mt.lvl(v), c = $('#c-' + mt.k); c.hidden = false; c.className = 'chip l' + L; setText(c, (mt.txt && mt.txt[L]) || CHIP[L]); }
+  }
+  setText($('#narr'), narrate(g) + ([0, 3, 5].includes(st.scene) && m.K >= 3 ? ` 膝も ${r0(m.K)}° 曲げ、骨盤を足の真上へ寄せています。` : ''));
+  $('#eq1').innerHTML = `<span style="color:var(--c-t1)">T1S ${r0(m.T1S)}°</span> = SS ${r0(m.SS)}° − LL ${r0(m.LL)}° + TK ${r0(m.TK)}°`;
+  $('#eq2').innerHTML = `<span style="color:var(--c-cer)">${r0(m.M)}°</span> = T1S ${r0(m.T1S)}° − CL ${r0(m.CL)}°（必要な CL ≧ ${r0(m.needCL)}°）`;
+  $('#eq3').innerHTML = `PI ${r0(m.PI)}° = PT ${r0(m.PT)}° + SS ${r0(m.SS)}°`;
+  $('#pibar').innerHTML = `<span style="width:${m.PT / m.PI * 100}%;background:var(--c-pel);opacity:.55">PT</span><span style="width:${m.SS / m.PI * 100}%;background:var(--c-pel)">SS</span>`;
+  const gp = $('#gPel'), gn = $('#gNeck');
+  const pcap = res.pelvis + m.gam;
+  setText($('#gPelT'), `PT ${r0(m.PT)}° / 上限 ${r0(pcap)}°`); setText($('#gKneeT'), `膝 ${r0(m.K)}° / 上限 ${res.knee}°`); setText($('#gNeckT'), `CL ${r0(m.CL)}° / 上限 ${res.neck}°`);
+  gp.querySelector('i').style.width = clamp(m.PT / pcap * 100, 0, 100) + '%'; $('#gKnee i').style.width = clamp(m.K / res.knee * 100, 0, 100) + '%'; $('#gKnee').classList.toggle('full', st.auto.knee && m.K >= res.knee - .5 && m.hip > 25); gn.querySelector('i').style.width = clamp(m.CL / res.neck * 100, 0, 100) + '%';
+  gp.classList.toggle('full', st.auto.pelvis && m.PT >= res.pelvis + m.gam - .5 && m.hip > 25); gn.classList.toggle('full', st.auto.neck && m.CL >= res.neck - .5 && m.M > 20);
+  for (const [k] of SL) {
+    const inp = $('#sl-' + k), locked = (k === 'PT' && st.auto.pelvis) || (k === 'CL' && st.auto.neck) || (k === 'K' && st.auto.knee);
+    inp.disabled = locked; if (document.activeElement !== inp) inp.value = locked ? st.shown[k] : st.base[k];
+    setText($('#so-' + k), r0(locked ? st.shown[k] : st.base[k]) + '°');
+  }
+  if (st.scene === 6) {
+    const cm = st.caseMeas, tb = $('#cs-cmp'), rows = [];
+    if (cm && cm.SVA != null) rows.push(['SVA (mm)', cm.SVA, m.SVA]);
+    if (cm && cm.C27 != null) rows.push(['C2-7 SVA (mm)', cm.C27, m.c27]);
+    tb.hidden = !rows.length;
+    if (rows.length) tb.innerHTML = '<tr><th></th><th>実測</th><th>モデル</th><th>差</th></tr>' + rows.map(([n, a, b]) => `<tr><td>${n}</td><td>${r0(a)}</td><td>${r0(b)}</td><td style="color:var(${Math.abs(b - a) > 30 ? '--warn' : '--ok'})">${sg(b - a)}</td></tr>`).join('');
+  }
+  if (st.scene === 5) {
+    const on = [m.PT - HEALTHY.PT >= 3, st.auto.pelvis && m.PT >= res.pelvis + m.gam - .5 && m.hip > 25, m.CL - HEALTHY.CL >= 3, m.M > 20];
+    document.querySelectorAll('#stages .stg').forEach((e, i) => { e.classList.toggle('on', on[i]); e.classList.toggle('crit', i === 3 && on[3] && m.psi >= 1); });
+  }
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (st.playing) { st.progress = Math.min(1, st.progress + dt / 10); if (st.progress >= 1) st.playing = false; applyProgress(); updProg(); }
+  const tgt = effective(st.base, st.auto, resNow()), k = reduce ? 1 : 1 - Math.exp(-dt / .14);
+  let moving = false;
+  for (const key of KEYS) { const d = tgt[key] - st.shown[key]; if (Math.abs(d) > .01) { st.shown[key] += d * k; moving = true; } else st.shown[key] = tgt[key]; }
+  if (moving || st.dirty) { render(); st.dirty = false; }
+  requestAnimationFrame(frame);
+}
+setScene(0);
+st.shown = effective(st.base, st.auto, resNow());
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

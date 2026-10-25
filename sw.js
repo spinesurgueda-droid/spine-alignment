@@ -16,6 +16,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // Standalone pages in subfolders (e.g. compensation-map/) are not part of this app: leave them to the network
+  if (url.pathname.includes('/compensation-map/')) return;
   // App page: network first so updates on GitHub arrive, cache when offline
   if (req.mode === 'navigate' || (url.origin === location.origin && url.pathname.endsWith('/index.html'))) {
     e.respondWith(fetch(req).then(res => {
