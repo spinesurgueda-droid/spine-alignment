@@ -142,14 +142,14 @@ details>summary{cursor:pointer;font-weight:700;font-size:15px}
 .dimh{fill:var(--ink)}
 [class*="s-"]{fill:none;stroke-linecap:round}
 .s-pel{stroke:var(--c-pel);stroke-width:3.4}.s-lum{stroke:var(--c-lum);stroke-width:3.4}.s-tho{stroke:var(--c-tho);stroke-width:3.4}
-.s-cer{stroke:var(--c-cer);stroke-width:3.4}.s-t1{stroke:var(--c-t1);stroke-width:3.4}.s-ink{stroke:var(--ink);stroke-width:2.6}
+.s-cer{stroke:var(--c-cer);stroke-width:3.4}.s-t1{stroke:var(--c-t1);stroke-width:3.4}.s-ink{stroke:var(--ink);stroke-width:2.6}.s-bad{stroke:var(--bad);stroke-width:3.4}.s-ok{stroke:var(--ok);stroke-width:3.4}
 .thin{stroke-width:2!important}.dsh{stroke-dasharray:8 7}.hl{stroke-width:7!important}
 .march{stroke-dasharray:9 8;animation:march 1s linear infinite}
 @keyframes march{to{stroke-dashoffset:-34}}
 .gaze{stroke:var(--accent);stroke-width:3;stroke-dasharray:3 8;stroke-linecap:round}
 .lb{font:600 22px var(--font-m);paint-order:stroke;stroke:var(--surface);stroke-width:7px;stroke-linejoin:round}
 .f-pel{fill:var(--c-pel)}.f-lum{fill:var(--c-lum)}.f-tho{fill:var(--c-tho)}.f-cer{fill:var(--c-cer)}.f-t1{fill:var(--c-t1)}
-.f-ink{fill:var(--ink)}.f-acc{fill:var(--accent)}.f-mut{fill:var(--muted)}
+.f-bad{fill:var(--bad)}.f-ok{fill:var(--ok)}.f-ink{fill:var(--ink)}.f-acc{fill:var(--accent)}.f-mut{fill:var(--muted)}
 .vl{font:500 18px var(--font-m);fill:var(--muted);paint-order:stroke;stroke:var(--surface);stroke-width:5px}
 .axl{font:500 11px var(--font-m);fill:var(--muted)}
 @media (max-width:920px){
@@ -207,6 +207,7 @@ details>summary{cursor:pointer;font-weight:700;font-size:15px}
       <div class="gauges">
         <div class="gauge" id="gPel"><div class="gl"><span>骨盤の使用量</span><span id="gPelT"></span></div><div class="bar"><i></i></div></div>
         <div class="gauge" id="gKnee"><div class="gl"><span>膝の使用量</span><span id="gKneeT"></span></div><div class="bar"><i></i></div></div>
+        <div class="gauge" id="gExt"><div class="gl"><span>頚部伸筋の需要 / 支持力</span><span id="gExtT"></span></div><div class="bar"><i></i></div></div>
         <div class="gauge" id="gNeck"><div class="gl"><span>頚椎の使用量</span><span id="gNeckT"></span></div><div class="bar"><i></i></div></div>
       </div>
     </section>
@@ -245,6 +246,7 @@ details>summary{cursor:pointer;font-weight:700;font-size:15px}
         <li>側面像の中心線だけを描いた教育用の幾何モデルです。個別症例の評価や診断には使えません。</li>
         <li>PI・PT・SS・LL・TK・CL は定義どおりの角度を入力にしています。T1 slope は SS − LL + TK（L1 上縁と T12 下縁の傾きが等しいと近似）、TK は T1–T12 相当です。椎体の高さと曲率の配分は平均的な値を仮定しています。</li>
         <li>判定色の目安：SVA 40/95 mm、PI−LL 10/20°、PT 20/30°（SRS-Schwab 分類）、T1S−CL 15/20°、C2–7 SVA 40/80 mm（頚椎変形分類）。</li>
+        <li>頚椎の S 字型後弯は、通常の前弯に「下位に後弯、上位に同量の前弯」を足して作っています（C2–7 の総角度は変わりません）。頚部伸筋の支持力は、需要が超えた分に比例して頚椎が折れ（10°/N·m、最大 45°）、折れるほど需要が増える単純なモデルで、数値はこのモデル独自の仮定です。</li>
         <li>「C7−足部（足関節の真上からのずれ）」「頭を支える曲げモーメント（頭 5 kg）」「視線の下がり（上位頚椎 C0–2 の代償余力 15° を超えた分）」「代償の上限値」は、このモデル独自の簡略化です。股関節の伸展と膝の屈曲は、足首は固定・大腿と下腿は等長・足首の背屈は膝屈曲の35%という単純な脚モデルで表しています（足関節の底背屈、骨盤の側方・回旋は含めません）。</li>
       </ul>
     </section>
@@ -256,7 +258,7 @@ details>summary{cursor:pointer;font-weight:700;font-size:15px}
 (() => {
 const R = Math.PI / 180;
 const HIP_Y = 900;
-const G = { d: 110, Ll: 180, Lt: 305, Lc: 85, c7: 8, pl: 4, plate: 17.5, hipTarget: 20, headKg: 5, leg: 450, ankleShare: 0.35 };
+const G = { d: 110, Ll: 180, Lt: 305, Lc: 85, c7: 8, pl: 4, plate: 17.5, hipTarget: 20, headKg: 5, leg: 450, ankleShare: 0.35, collapse: 10 };
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const thighTilt = K => K * (1 - G.ankleShare);   // forward tilt of the thigh (deg) for knee flexion K
@@ -289,7 +291,9 @@ function geom(P) {
   const T1 = tho[tho.length - 1];
   const T1S = T1.phi;
   const c7 = { x: T1.x + G.c7 * Math.sin(T1S * R), y: T1.y + G.c7 * Math.cos(T1S * R), phi: T1S };
-  const cer = integ(c7, G.Lc, s => T1S - P.CL * s, 24);
+  const CK = P.CK || 0;
+  const bump = s => (s < 0.5 ? 2 * s : 2 * (1 - s));
+  const cer = integ(c7, G.Lc, s => T1S - P.CL * s + CK * bump(s), 24);
   const C2 = cer[cer.length - 1];
   const M = T1S - P.CL;
   const psi = Math.max(0, M - 30);
@@ -300,7 +304,7 @@ function geom(P) {
   const hv = { x: 22 * cs + 62 * sn, y: -22 * sn + 62 * cs };
   const head = { x: C1.x + hv.x, y: C1.y + hv.y };
   const m = {
-    PI: P.PI, PT: P.PT, SS, LL: P.LL, TK: P.TK, CL: P.CL, K, T1S, M,
+    PI: P.PI, PT: P.PT, SS, LL: P.LL, TK: P.TK, CL: P.CL, CK, upCL: P.CL + CK, K, T1S, M,
     SVA: c7.x - post.x, hip: c7.x, c27: C2.x - c7.x, piLL: P.PI - P.LL,
     psi, ucExt, needCL: T1S - 20, gam: ga,
     arm: head.x - c7.x,
@@ -335,16 +339,26 @@ function effective(b, auto, res) {
     CL = clamp(want, b0.CL, Math.max(b0.CL, res.neck));
     if (want < b0.CL) CL = b0.CL;
   }
-  return { PI: b0.PI, PT, LL: b0.LL, TK: b0.TK, CL, K };
+  let CK = b0.CK || 0, FL = 0;
+  const Tc = b0.Tc == null ? 99 : b0.Tc;
+  if (Tc < 90) {   // neck extensors cannot hold the head: the neck flexes until demand and capacity balance (or it saturates)
+    const CL0 = CL, CK0 = CK;
+    for (let i = 0; i < 12; i++) {
+      const tq = geom({ ...b0, PT, K, CL: CL0 - FL, CK: CK0 + 0.4 * FL }).m.torque;
+      FL = 0.5 * FL + 0.5 * clamp((tq - Tc) * G.collapse, 0, 45);
+    }
+    CL = CL0 - FL; CK = CK0 + 0.4 * FL;
+  }
+  return { PI: b0.PI, PT, LL: b0.LL, TK: b0.TK, CL, CK, K, FL };
 }
 if (typeof module !== 'undefined') module.exports = { geom, effective, G };
 
 
-const HEALTHY = { PI: 52, PT: 12, LL: 55, TK: 38, CL: 14, K: 0 };
+const HEALTHY = { PI: 52, PT: 12, LL: 55, TK: 38, CL: 14, K: 0, CK: 0, Tc: 9 };
 const RESV = { pelvis: { good: 38, low: 22 }, neck: { good: 45, low: 16 }, knee: { good: 35, low: 10 } };
-const KEYS = ['PI', 'PT', 'LL', 'TK', 'CL', 'K'];
+const KEYS = ['PI', 'PT', 'LL', 'TK', 'CL', 'K', 'CK', 'FL'];
 const st = { base: { ...HEALTHY }, auto: { pelvis: false, neck: false, knee: false }, resMode: { pelvis: 'good', neck: 'good', knee: 'good' }, caseBase: null, caseMeas: null, caseHip: 0, stripped: false,
-  shown: { ...HEALTHY }, scene: 0, action: 0, showAll: false, progress: 0, playing: false, dirty: true };
+  shown: { ...HEALTHY, FL: 0 }, scene: 0, action: 0, showAll: false, progress: 0, playing: false, dirty: true };
 const $ = s => document.querySelector(s);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const resNow = () => ({ pelvis: RESV.pelvis[st.resMode.pelvis], neck: RESV.neck[st.resMode.neck], knee: RESV.knee[st.resMode.knee] });
@@ -426,6 +440,21 @@ const SCENES = [
      { l: '頚椎前弯が消える（CL 0°）', run: () => apply({ CL: 0 }) },
      { l: '頚椎が後弯（CL −20°）', run: () => apply({ CL: -20 }) },
      { l: 'T1S が高く、頚椎を大きく反らす', run: () => apply({ TK: 66, CL: 42 }) } ] },
+ { tab: '頚椎後弯・首下がり', group: 4, title: '頚椎の後弯変形と首下がり（dropped head）', overlays: ['cerv', 'ck', 'c27'],
+   lead: '頚椎は前弯が減るだけでなく、下位頚椎が後弯し、その上を上位頚椎の過前弯で補う S 字型にもなります。C2–7 の前弯角が保たれていても、下位頚椎の後弯が隠れていることがあります。さらに頭を支える後頚部の筋（伸筋）が支えきれなくなると、頚椎が前へ折れて首下がり（dropped head）になります。',
+   eng: '頭は先端に載った約 5 kg の荷重で、伸筋は曲げモーメントを受け持つワイヤーに当たります。耐力を超えると首が折れ、折れるほど腕が伸びて荷重が増える悪循環に入ります。',
+   watch: ['赤い線が下位頚椎の後弯、緑の線が上位頚椎の代償前弯です。2 つの角度は打ち消し合うので、C2–7 の角度（CL）だけでは後弯が見えません。',
+     '「頚部伸筋の支持力」を下げると、頭の曲げモーメント（需要）が支持力を超えた時点で頚椎が折れ始め、腕が伸びて需要が増えるため、一気に首下がりへ進みます。',
+     'T1S が高い人は、頭の位置が同じでも需要が大きく、少しの筋力低下で首下がりに達します。「頚椎を反らして受ける」で需要は下がりますが、反らし続ける仕事が残ります。'],
+   actions: [
+     { l: '標準', run: () => apply() },
+     { l: '頚椎全体が後弯（CL −20°）', run: () => apply({ CL: -20 }) },
+     { l: 'S 字型：下位が後弯、上位が代償', run: () => apply({ CL: 8, CK: 30 }) },
+     { l: '伸筋の筋力低下（アライメントは正常）', run: () => apply({ Tc: 1.5 }) },
+     { l: 'T1S が高い（TK 55° / LL 45°）', run: () => apply({ LL: 45, TK: 55 }) },
+     { l: '＋伸筋が疲れる（支持力 4.5 N·m）→ 首下がり', run: () => apply({ LL: 45, TK: 55, Tc: 4.5 }) },
+     { l: '＋頚椎を反らして受ける', run: () => apply({ LL: 45, TK: 55, Tc: 4.5 }, { neck: true }) },
+     { l: '＋頚椎が硬くて反らせない', run: () => apply({ LL: 45, TK: 55, Tc: 4.5 }, { neck: true }, { neck: 'low' }) } ] },
  { tab: '代償の連鎖', group: -1, title: '代償の連鎖（加齢・変性のシミュレーション）', overlays: ['hip', 'sva', 'cerv'],
    lead: '腰の反りが減り、背中が丸くなっていく変性を少しずつ進めます。足りない分は、まず骨盤、次に頚椎が肩代わりし、両方の予備力が尽きると誤差が表に出てきます。',
    eng: '直列につながった緩衝器と考えてください。上流（腰）で生じた誤差を下流（骨盤、頚椎）が順に吸収し、どちらも飽和すると外に漏れます。',
@@ -457,8 +486,11 @@ const METRICS = [
  { g: 3, k: 'piLL', l: 'PI − LL', u: '°', f: m => m.piLL, lvl: lv3(9.99, 20), ref: '10° 未満が正常、20° 超で高度' },
  { g: 5, k: 'hipExt', l: '股関節の伸展（代償分）', u: '°', f: m => Math.max(0, m.PT - HEALTHY.PT - m.gam), ref: 'PT − 12° − 大腿の前傾' },
  { g: 5, k: 'K', l: '膝屈曲', u: '°', f: m => m.K, lvl: lv3(4.99, 15), txt: ['使っていない', '軽度', '使用'], ref: '立位で膝を曲げるほど筋疲労が大きい' },
+ { g: 4, k: 'CK', l: '下位頚椎の後弯（C4–7）', u: '°', f: m => m.CK, ref: 'S 字型の後弯成分（C2–7 の角度に隠れる）' },
+ { g: 4, k: 'upCL', l: '上位頚椎の前弯（C2–4）', u: '°', f: m => m.upCL, ref: 'CL + CK（代償で大きくなる）' },
+ { g: 4, k: 'extLoad', l: '頚部伸筋の負荷率', u: '%', f: m => m.torque / st.base.Tc * 100, lvl: v => (v < 70 ? 0 : v <= 100 ? 1 : 2), txt: ['余裕あり', '限界に近い', '支えきれない'], ref: '頭の曲げモーメント ÷ 支持力' },
  { g: 4, k: 'c27', l: 'C2-7 SVA', u: 'mm', f: m => m.c27, lvl: lv3(40, 80), ref: '40 mm 未満が正常' },
- { g: 4, k: 'psi', l: '視線の下がり（モデル）', u: '°', f: m => m.psi, lvl: v => (v < 1 ? 0 : v < 5 ? 1 : 2), txt: ['水平視を保てる', '', '首下がりの方向'], ref: 'C0–2 の余力 15° を超えた分' },
+ { g: 4, k: 'psi', l: '視線の下がり（CBVA に相当・モデル）', u: '°', f: m => m.psi, lvl: v => (v < 1 ? 0 : v < 5 ? 1 : 2), txt: ['水平視を保てる', '', '首下がりの方向'], ref: 'C0–2 の余力 15° を超えた分' },
  { g: 4, k: 'torque', l: '頭を支える曲げモーメント', u: 'N·m', f: m => m.torque, d: 1, ref: '頭 5 kg × C7 から重心までの距離' } ];
 const CHIP = ['正常', '注意', '逸脱'];
 
@@ -474,8 +506,8 @@ GROUPS.forEach((gname, gi) => {
     `<div class="tile"><div class="tl">${m.l}</div><div class="tv"><span id="v-${m.k}">0</span><small>${m.u}</small></div><div class="tr">${m.ref}</div><span class="chip" id="c-${m.k}" hidden></span></div>`).join('') + '</div>';
   metricsEl.appendChild(d);
 });
-const SL = [['PI', 'PI（骨盤の形）', 25, 90], ['PT', 'PT（骨盤の後傾）', 0, 50], ['LL', 'LL（腰椎前弯）', 0, 85], ['TK', 'TK（胸椎後弯）', 5, 80], ['CL', 'CL（頚椎前弯）', -25, 55], ['K', 'K（膝屈曲）', 0, 45]];
-$('#sliders').innerHTML = SL.map(([k, l, a, b]) => `<div class="srow"><label for="sl-${k}">${l}</label><input type="range" id="sl-${k}" min="${a}" max="${b}" step="1"><output id="so-${k}"></output></div>`).join('');
+const SL = [['PI', 'PI（骨盤の形）', 25, 90], ['PT', 'PT（骨盤の後傾）', 0, 50], ['LL', 'LL（腰椎前弯）', 0, 85], ['TK', 'TK（胸椎後弯）', 5, 80], ['CL', 'CL（頚椎前弯）', -25, 55], ['K', 'K（膝屈曲）', 0, 45], ['CK', 'CK（下位頚椎の後弯）', 0, 50], ['Tc', '頚部伸筋の支持力（N·m）', 1, 9]];
+$('#sliders').innerHTML = SL.map(([k, l, a, b]) => `<div class="srow"><label for="sl-${k}">${l}</label><input type="range" id="sl-${k}" min="${a}" max="${b}" step="${k === 'Tc' ? 0.5 : 1}"><output id="so-${k}"></output></div>`).join('');
 SL.forEach(([k]) => $('#sl-' + k).addEventListener('input', e => { st.base[k] = +e.target.value; st.playing = false; st.dirty = true; }));
 
 const cfield = (id, l, ph) => `<label class="cf"><span>${l}</span><input type="number" step="any" inputmode="decimal" id="cs-${id}" placeholder="${ph || ''}"></label>`;
@@ -648,6 +680,12 @@ function overlays(g, set) {
     s += arc(O, 46, 0, -g.T1S, 's-t1') + arc(O, 72, -g.T1S, -g.M, 's-cer') + arc(O, 98, 0, -g.M, 's-ink dsh');
     s += txt({ x: O.x - 14, y: O.y + 44 }, `T1S ${r0(g.T1S)}°`, 'lb f-t1', 'end') + txt({ x: O.x - 14, y: O.y + 14 }, `CL ${r0(g.P.CL)}°`, 'lb f-cer', 'end') + txt({ x: O.x - 14, y: O.y - 16 }, `T1S−CL ${r0(g.M)}°`, 'lb f-ink', 'end');
   }
+  if (has('ck') && m.CK >= 2) {
+    const off = p => add(p, aDir(p.phi), 26), pl = (arr, cls) => `<polyline class="${cls} hl" points="${arr.map(p => pt(off(p))).join(' ')}"/>`;
+    s += pl(g.cer.slice(0, 13), 's-bad') + pl(g.cer.slice(12), 's-ok');
+    const O = { x: -215, y: g.c7.y + 20 };
+    s += txt({ x: O.x - 14, y: O.y - 46 }, `C4–7 後弯 ${r0(m.CK)}°`, 'lb f-bad', 'end') + txt({ x: O.x - 14, y: O.y - 76 }, `C2–4 ${m.upCL >= 0 ? '前弯' : '後弯'} ${r0(Math.abs(m.upCL))}°`, 'lb f-ok', 'end');
+  }
   if (has('t1pl')) s += txt(add(g.T1, aDir(g.T1S), -62), 'T1', 'vl', 'end') + plate(g.T1, g.T1S, 36, 's-t1 hl') + plate(g.C2, g.M, 26, 's-cer hl');
   if (has('lum')) {
     const O = { x: -215, y: g.lum[20].y }, a0 = -g.SS, a1 = -g.L1.phi;
@@ -732,7 +770,14 @@ function narrate(g) {
       if (pOn) return `腰の反りが減った分を、骨盤が後ろへ倒れて（PT ${r0(m.PT)}°）受けています。外見上のバランスは保たれています。`;
       return '代償を使わなくても釣り合っている状態です。スライダーを右へ動かして変性を進めてください。';
     }
-    case 6: {
+    case 5: {
+      const FL = st.shown.FL || 0;
+      if (FL >= 3) return `頭の曲げモーメント ${m.torque.toFixed(1)} N·m が伸筋の支持力 ${b.Tc.toFixed(1)} N·m を超え、頚椎が ${r0(FL)}° 折れています。折れるほど腕が伸びて負荷が増すので、止まりにくくなります。視線は ${r0(m.psi)}° 下がっています${m.psi >= 1 ? '（首下がり）' : ''}。`;
+      if (m.CK >= 10) return `下位頚椎が ${r0(m.CK)}° 後弯し、上位頚椎が ${r0(m.upCL)}° 前弯して頭を起こしています。C2–7 の CL は ${r0(m.CL)}° ですが、後弯が内部に隠れています。`;
+      if (m.CL < 0) return `頚椎全体が後弯しています（CL ${r0(m.CL)}°）。C2 が ${r0(m.M)}° 前へ傾いて頭が ${sg(m.c27)} mm 前に出て、曲げモーメントは ${m.torque.toFixed(1)} N·m です。`;
+      return `T1S − CL = ${r0(m.M)}°、頭の曲げモーメント ${m.torque.toFixed(1)} N·m（支持力 ${b.Tc >= 9 ? '十分' : b.Tc.toFixed(1) + ' N·m'}）。` + (st.auto.neck && m.CL - b.CL >= 4 ? ` 頚椎を ${r0(m.CL)}° まで反らして需要を下げています。` : '') + (m.psi >= 1 ? ' 上位頚椎の余力が尽き、視線が下がっています。' : '');
+    }
+    case 7: {
       if (!st.caseBase) return '数値を入力して「この症例を再現」を押してください。サンプル症例も入れられます。';
       let t = `再現中：C7 は足関節から ${sg(m.hip)} mm、SVA ${r0(m.SVA)} mm、PT ${r0(m.PT)}°` + (m.K >= 3 ? `、膝屈曲 ${r0(m.K)}°` : '') + '。';
       if (st.stripped) t += ` 代償（PT・CL・膝）を外すと、C7 は ${r0(m.hip - st.caseHip)} mm さらに前へ出ます。`;
@@ -752,7 +797,7 @@ function render() {
     const v = mt.f(m); setText($('#v-' + mt.k), mt.d ? v.toFixed(mt.d) : String(r0(v)));
     if (mt.lvl) { const L = mt.lvl(v), c = $('#c-' + mt.k); c.hidden = false; c.className = 'chip l' + L; setText(c, (mt.txt && mt.txt[L]) || CHIP[L]); }
   }
-  setText($('#narr'), narrate(g) + ([0, 3, 5].includes(st.scene) && m.K >= 3 ? ` 膝も ${r0(m.K)}° 曲げ、骨盤を足の真上へ寄せています。` : ''));
+  setText($('#narr'), narrate(g) + ([0, 3, 6].includes(st.scene) && m.K >= 3 ? ` 膝も ${r0(m.K)}° 曲げ、骨盤を足の真上へ寄せています。` : ''));
   $('#eq1').innerHTML = `<span style="color:var(--c-t1)">T1S ${r0(m.T1S)}°</span> = SS ${r0(m.SS)}° − LL ${r0(m.LL)}° + TK ${r0(m.TK)}°`;
   $('#eq2').innerHTML = `<span style="color:var(--c-cer)">${r0(m.M)}°</span> = T1S ${r0(m.T1S)}° − CL ${r0(m.CL)}°（必要な CL ≧ ${r0(m.needCL)}°）`;
   $('#eq3').innerHTML = `PI ${r0(m.PI)}° = PT ${r0(m.PT)}° + SS ${r0(m.SS)}°`;
@@ -761,20 +806,21 @@ function render() {
   const pcap = res.pelvis + m.gam;
   setText($('#gPelT'), `PT ${r0(m.PT)}° / 上限 ${r0(pcap)}°`); setText($('#gKneeT'), `膝 ${r0(m.K)}° / 上限 ${res.knee}°`); setText($('#gNeckT'), `CL ${r0(m.CL)}° / 上限 ${res.neck}°`);
   gp.querySelector('i').style.width = clamp(m.PT / pcap * 100, 0, 100) + '%'; $('#gKnee i').style.width = clamp(m.K / res.knee * 100, 0, 100) + '%'; $('#gKnee').classList.toggle('full', st.auto.knee && m.K >= res.knee - .5 && m.hip > 25); gn.querySelector('i').style.width = clamp(m.CL / res.neck * 100, 0, 100) + '%';
+  setText($('#gExtT'), `${m.torque.toFixed(1)} / ${st.base.Tc >= 9 ? '十分' : st.base.Tc.toFixed(1)} N·m`); $('#gExt i').style.width = clamp(m.torque / st.base.Tc * 100, 0, 100) + '%'; $('#gExt').classList.toggle('full', m.torque > st.base.Tc + .05);
   gp.classList.toggle('full', st.auto.pelvis && m.PT >= res.pelvis + m.gam - .5 && m.hip > 25); gn.classList.toggle('full', st.auto.neck && m.CL >= res.neck - .5 && m.M > 20);
   for (const [k] of SL) {
     const inp = $('#sl-' + k), locked = (k === 'PT' && st.auto.pelvis) || (k === 'CL' && st.auto.neck) || (k === 'K' && st.auto.knee);
     inp.disabled = locked; if (document.activeElement !== inp) inp.value = locked ? st.shown[k] : st.base[k];
-    setText($('#so-' + k), r0(locked ? st.shown[k] : st.base[k]) + '°');
+    setText($('#so-' + k), k === 'Tc' ? st.base.Tc.toFixed(1) : r0(locked ? st.shown[k] : st.base[k]) + '°');
   }
-  if (st.scene === 6) {
+  if (st.scene === 7) {
     const cm = st.caseMeas, tb = $('#cs-cmp'), rows = [];
     if (cm && cm.SVA != null) rows.push(['SVA (mm)', cm.SVA, m.SVA]);
     if (cm && cm.C27 != null) rows.push(['C2-7 SVA (mm)', cm.C27, m.c27]);
     tb.hidden = !rows.length;
     if (rows.length) tb.innerHTML = '<tr><th></th><th>実測</th><th>モデル</th><th>差</th></tr>' + rows.map(([n, a, b]) => `<tr><td>${n}</td><td>${r0(a)}</td><td>${r0(b)}</td><td style="color:var(${Math.abs(b - a) > 30 ? '--warn' : '--ok'})">${sg(b - a)}</td></tr>`).join('');
   }
-  if (st.scene === 5) {
+  if (st.scene === 6) {
     const on = [m.PT - HEALTHY.PT >= 3, st.auto.pelvis && m.PT >= res.pelvis + m.gam - .5 && m.hip > 25, m.CL - HEALTHY.CL >= 3, m.M > 20];
     document.querySelectorAll('#stages .stg').forEach((e, i) => { e.classList.toggle('on', on[i]); e.classList.toggle('crit', i === 3 && on[3] && m.psi >= 1); });
   }
